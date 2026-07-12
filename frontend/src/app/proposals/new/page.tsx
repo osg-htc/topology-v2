@@ -1,21 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 
 // Register-a-resource form. Submits a "create resource" change proposal, which a
 // manager/administrator then reviews and approves.
-export default function NewProposalPage() {
+function NewResourceForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [name, setName] = useState("");
-  const [rg, setRg] = useState("");
+  const [rg, setRg] = useState(params.get("rg") ?? "");
   const [fqdn, setFqdn] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Resource groups drive the dropdown; must be an existing (active) RG.
+  const { data: rgs } = useQuery({
+    queryKey: ["resource-groups", false],
+    queryFn: () => api.resourceGroups(),
+  });
+  const rgNames = new Set((rgs ?? []).map((g) => g.name));
+  const rgValid = rgNames.has(rg);
 
   const submit = async (asDraft: boolean) => {
     setErr("");
@@ -49,8 +60,34 @@ export default function NewProposalPage() {
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
-            <label className={label}>Resource group</label>
-            <input className={input} value={rg} onChange={(e) => setRg(e.target.value)} />
+            <div className="mb-1 flex items-center justify-between">
+              <label className={`${label} mb-0`}>Resource group</label>
+              <Link
+                href={`/resource-groups/new?return=resource`}
+                className="text-xs text-brand-600 hover:underline"
+              >
+                + New resource group
+              </Link>
+            </div>
+            <input
+              className={input}
+              list="rg-options"
+              value={rg}
+              onChange={(e) => setRg(e.target.value)}
+              placeholder="Search resource groups…"
+            />
+            <datalist id="rg-options">
+              {(rgs ?? []).map((g) => (
+                <option key={g.name} value={g.name}>
+                  {g.site} · {g.facility}
+                </option>
+              ))}
+            </datalist>
+            {rg && !rgValid && (
+              <p className="mt-1 text-xs text-amber-600">
+                “{rg}” is not an existing resource group. Pick one from the list or create it.
+              </p>
+            )}
           </div>
           <div>
             <label className={label}>FQDN</label>
@@ -71,7 +108,11 @@ export default function NewProposalPage() {
           </label>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <div className="flex gap-3 pt-2">
-            <button className={btn} disabled={busy || !name || !rg || !fqdn} onClick={() => submit(false)}>
+            <button
+              className={btn}
+              disabled={busy || !name || !rgValid || !fqdn}
+              onClick={() => submit(false)}
+            >
               Submit for review
             </button>
             <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>
@@ -81,5 +122,13 @@ export default function NewProposalPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function NewProposalPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewResourceForm />
+    </Suspense>
   );
 }

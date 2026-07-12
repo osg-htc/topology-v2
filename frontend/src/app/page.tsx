@@ -19,6 +19,8 @@ export default function DashboardPage() {
         action={<LinkButton href="/proposals/new">Register a resource</LinkButton>}
       />
 
+      <SummaryTiles />
+
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
           My resources
@@ -68,6 +70,39 @@ export default function DashboardPage() {
         </section>
       )}
     </div>
+  );
+}
+
+const TILES: { key: keyof import("@/lib/api").Summary; label: string; href: string }[] = [
+  { key: "resources", label: "Resources", href: "/resources" },
+  { key: "resource_groups", label: "Resource groups", href: "/resource-groups" },
+  { key: "sites", label: "Sites", href: "/sites" },
+  { key: "facilities", label: "Facilities", href: "/facilities" },
+  { key: "institutions", label: "Institutions", href: "/institutions" },
+  { key: "vos", label: "VOs", href: "/resources" },
+  { key: "projects", label: "Projects", href: "/resources" },
+];
+
+function SummaryTiles() {
+  const { data } = useQuery({ queryKey: ["summary"], queryFn: api.summary });
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+        All topology
+      </h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {TILES.filter((t) => t.key !== "vos" && t.key !== "projects").map((t) => (
+          <Link
+            key={t.key}
+            href={t.href}
+            className="rounded-lg border border-gray-200 bg-white p-4 hover:border-brand-400"
+          >
+            <div className="text-2xl font-bold text-navy-900">{data ? data[t.key] : "—"}</div>
+            <div className="text-xs uppercase tracking-wide text-gray-500">{t.label}</div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

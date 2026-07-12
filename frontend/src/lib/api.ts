@@ -119,8 +119,16 @@ export const api = {
       }),
   },
   dashboard: () => fetchJSON<Dashboard>("/dashboard"),
+  summary: () => fetchJSON<Summary>("/summary"),
   resources: () => fetchJSON<Record<string, DashboardResource>>("/resources"),
   rgsummary: () => fetchJSON<unknown>("/rgsummary"),
+  resourceGroups: (includeInactive = false) =>
+    fetchJSON<ResourceGroup[]>(`/resource-groups${includeInactive ? "?include_inactive=1" : ""}`),
+  sites: (includeInactive = false) =>
+    fetchJSON<Site[]>(`/sites${includeInactive ? "?include_inactive=1" : ""}`),
+  facilities: (includeInactive = false) =>
+    fetchJSON<Facility[]>(`/facilities${includeInactive ? "?include_inactive=1" : ""}`),
+  institutions: () => fetchJSON<Institution[]>("/institutions"),
   proposals: {
     mine: () => fetchJSON<Proposal[]>("/proposals/mine"),
     pending: () => fetchJSON<Proposal[]>("/proposals/pending"),
@@ -159,6 +167,20 @@ export const api = {
   },
   audit: () => fetchJSON<AuditEntry[]>("/audit"),
   admin: {
+    syncInstitutions: () =>
+      fetchJSON<{ synced: number }>("/admin/institutions/sync", { method: "POST" }),
+    getOIDCConfig: () => fetchJSON<OIDCConfig>("/admin/oidc-config"),
+    setOIDCConfig: (body: { issuer: string; client_id: string; client_secret?: string }) =>
+      fetchJSON<{ status: string }>("/admin/oidc-config", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    listUsers: () => fetchJSON<AdminUser[]>("/admin/users"),
+    setUserRole: (id: string, role: string, action: "add" | "remove") =>
+      fetchJSON<{ status: string }>(`/admin/users/${id}/roles`, {
+        method: "POST",
+        body: JSON.stringify({ role, action }),
+      }),
     listBackups: () => fetchJSON<{ backups: string[] }>("/admin/backups"),
     createBackup: () => fetchJSON<{ key: string; size: number }>("/admin/backup", { method: "POST" }),
     restore: (key: string) =>
@@ -173,6 +195,74 @@ export const api = {
       }),
   },
 };
+
+export interface Summary {
+  resources: number;
+  resource_groups: number;
+  sites: number;
+  facilities: number;
+  institutions: number;
+  vos: number;
+  projects: number;
+}
+
+export interface ResourceGroup {
+  name: string;
+  group_id: number;
+  site: string;
+  facility: string;
+  production: boolean | null;
+  support_center: string;
+  group_description: string;
+  resource_count: number;
+  deleted: boolean;
+}
+
+export interface Site {
+  name: string;
+  site_id: number;
+  facility: string;
+  long_name: string;
+  city: string;
+  state: string;
+  country: string;
+  deleted: boolean;
+}
+
+export interface Facility {
+  name: string;
+  facility_id: number;
+  institution_id: string;
+  site_count: number;
+  deleted: boolean;
+}
+
+export interface Institution {
+  id: string;
+  name: string;
+  ror_id: string;
+}
+
+export interface OIDCConfig {
+  issuer: string;
+  client_id: string;
+  has_secret: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  display_name: string;
+  status: string;
+  is_provisioned: boolean;
+  roles?: string[];
+  identities: {
+    id: string;
+    issuer: string;
+    subject: string;
+    email?: string;
+    cilogon_id?: string;
+  }[];
+}
 
 export interface InvitePreview {
   kind: string;

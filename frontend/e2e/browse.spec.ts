@@ -9,7 +9,7 @@ test("resources page renders without crashing", async ({ page }) => {
   page.on("pageerror", (e) => errors.push(String(e)));
 
   await devLogin(page, "administrator", "admin@example.org");
-  await page.getByRole("link", { name: "Resources" }).click();
+  await page.getByRole("link", { name: "Resources", exact: true }).click();
 
   await expect(page).toHaveURL(/\/resources/);
   await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible();

@@ -7,11 +7,17 @@ import { SessionInfo } from "@/lib/api";
 const nav = [
   { href: "/", label: "Dashboard" },
   { href: "/resources", label: "Resources" },
+  { href: "/resource-groups", label: "Resource groups" },
+  { href: "/sites", label: "Sites" },
+  { href: "/facilities", label: "Facilities" },
+  { href: "/institutions", label: "Institutions" },
   { href: "/proposals", label: "My proposals" },
 ];
 
 const reviewerNav = [{ href: "/proposals/review", label: "Review queue" }];
 const adminNav = [
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/settings", label: "Settings" },
   { href: "/admin/audit", label: "Audit log" },
   { href: "/admin/backup", label: "Backup & restore" },
 ];
