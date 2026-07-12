@@ -11,7 +11,7 @@ const nav = [
   { href: "/sites", label: "Sites" },
   { href: "/facilities", label: "Facilities" },
   { href: "/projects", label: "Projects" },
-  { href: "/proposals", label: "My proposals" },
+  { href: "/proposals", label: "My requests" },
 ];
 
 const reviewerNav = [{ href: "/proposals/review", label: "Review queue" }];

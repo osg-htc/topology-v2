@@ -129,6 +129,10 @@ export const api = {
   facilityDetail: (name: string) =>
     fetchJSON<FacilityDetail>(`/facilities/${encodeURIComponent(name)}`),
   rgsummary: () => fetchJSON<unknown>("/rgsummary"),
+  serviceNames: () => fetchJSON<string[]>("/service-names"),
+  voNames: () => fetchJSON<string[]>("/vo-names"),
+  tagNames: () => fetchJSON<string[]>("/tag-names"),
+  contacts: () => fetchJSON<{ name: string; id: string }[]>("/contacts"),
   resourceGroups: (includeInactive = false) =>
     fetchJSON<ResourceGroup[]>(`/resource-groups${includeInactive ? "?include_inactive=1" : ""}`),
   sites: (includeInactive = false) =>

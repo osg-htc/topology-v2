@@ -46,6 +46,9 @@ function ProposalView() {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["proposal", id] });
     qc.invalidateQueries({ queryKey: ["dashboard"] });
+    // Also refresh the review queue and "my requests" lists so a
+    // rejected/approved/withdrawn request drops off them immediately.
+    qc.invalidateQueries({ queryKey: ["proposals"] });
   };
 
   const act = useMutation({

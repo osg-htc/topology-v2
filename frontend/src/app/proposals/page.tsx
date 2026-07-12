@@ -11,14 +11,15 @@ export default function MyProposalsPage() {
   return (
     <div className="p-8">
       <PageHeader
-        title="My proposals"
-        action={<LinkButton href="/proposals/new">New proposal</LinkButton>}
+        title="My change requests"
+        description="Change requests you've submitted to register or modify topology entities. A manager or administrator reviews and approves each one before it takes effect."
+        action={<LinkButton href="/proposals/new">Register a resource</LinkButton>}
       />
       {isLoading ? (
         <p className="text-gray-400">Loading…</p>
       ) : !data || data.length === 0 ? (
         <Card>
-          <p className="text-sm text-gray-500">You have no proposals yet.</p>
+          <p className="text-sm text-gray-500">You have no change requests yet.</p>
         </Card>
       ) : (
         <div className="space-y-2">

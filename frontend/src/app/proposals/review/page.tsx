@@ -14,13 +14,16 @@ export default function ReviewQueuePage() {
 
   return (
     <div className="p-8">
-      <PageHeader title="Review queue" />
+      <PageHeader
+        title="Review queue"
+        description="Change requests awaiting review. Approve to apply the change, or reject with a reason."
+      />
       {isLoading ? (
         <p className="text-gray-400">Loading…</p>
       ) : error ? (
         <Card>
           <p className="text-sm text-red-600">
-            You need the manager or administrator role to review proposals.
+            You need the manager or administrator role to review change requests.
           </p>
         </Card>
       ) : !data || data.length === 0 ? (

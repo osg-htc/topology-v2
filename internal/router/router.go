@@ -74,6 +74,11 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Get("/projects", h.ListProjectsBrowseHandler)
 		r.Get("/projects/{name}", h.GetProjectHandler)
 		r.Get("/institutions", h.ListInstitutionsHandler)
+		// Pick-list sources for form dropdowns.
+		r.Get("/service-names", h.ServiceNamesHandler)
+		r.Get("/vo-names", h.VONamesHandler)
+		r.Get("/tag-names", h.TagsHandler)
+		r.Get("/contacts", h.ContactsHandler)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {

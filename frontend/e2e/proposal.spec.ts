@@ -17,8 +17,8 @@ test("register a resource creates a proposal", async ({ page }) => {
   await page.getByPlaceholder("Search resource groups…").fill(rgName);
   await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase()}.example.org`);
   // A contact is required for a complete registration.
-  await page.getByPlaceholder("Name").first().fill("E2E Admin");
-  await page.getByPlaceholder(/Contact ID/).first().fill("OSG1000016");
+  await page.getByPlaceholder("Contact", { exact: true }).first().fill("E2E Admin");
+  await page.getByPlaceholder("ID", { exact: true }).first().fill("OSG1000016");
 
   const submit = page.getByRole("button", { name: "Submit for review" });
   await expect(submit).toBeEnabled();

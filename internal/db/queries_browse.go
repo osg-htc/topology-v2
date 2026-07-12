@@ -304,6 +304,81 @@ func (q *Queries) GetSiteDetail(ctx context.Context, name string) (*SiteRow, str
 	return r, facName, nil
 }
 
+// nameList runs a no-argument name query and collects the results.
+func (q *Queries) nameList(ctx context.Context, sql string) ([]string, error) {
+	rows, err := q.pool.Query(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// ListServiceNames returns known service names (services.yaml), sorted.
+func (q *Queries) ListServiceNames(ctx context.Context) ([]string, error) {
+	return q.nameList(ctx, `SELECT name FROM services ORDER BY name`)
+}
+
+// ListVONames returns active VO names, sorted.
+func (q *Queries) ListVONames(ctx context.Context) ([]string, error) {
+	return q.nameList(ctx, `SELECT name FROM vos WHERE deleted_at IS NULL ORDER BY name`)
+}
+
+// ListDistinctTags returns the distinct resource tags currently in use.
+func (q *Queries) ListDistinctTags(ctx context.Context) ([]string, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT DISTINCT unnest(tags) AS t FROM resources WHERE deleted_at IS NULL ORDER BY t`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ContactOption is a distinct known contact (person) for pick-lists.
+type ContactOption struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
+}
+
+// ListDistinctContacts returns distinct known contacts from resource_contacts.
+func (q *Queries) ListDistinctContacts(ctx context.Context) ([]ContactOption, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT DISTINCT COALESCE(contact_name,''), COALESCE(contact_id,'')
+		 FROM resource_contacts
+		 WHERE deleted_at IS NULL AND (contact_name <> '' OR contact_id <> '')
+		 ORDER BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ContactOption, 0)
+	for rows.Next() {
+		var c ContactOption
+		if err := rows.Scan(&c.Name, &c.ID); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // Institution is a cached institution registry row.
 type Institution struct {
 	IIDURI string `json:"id"`

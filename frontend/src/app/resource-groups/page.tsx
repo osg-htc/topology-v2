@@ -6,7 +6,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { PageHeader, LinkButton, Card, input } from "@/components/ui";
 import { InactiveToggle } from "@/components/BrowseControls";
-import { useIsReviewer, ProposeDeleteButton } from "@/components/entityActions";
+import { useIsReviewer, DeleteButton } from "@/components/entityActions";
 
 export default function ResourceGroupsPage() {
   const [inactive, setInactive] = useState(false);
@@ -78,7 +78,7 @@ export default function ResourceGroupsPage() {
                   {isReviewer && (
                     <td className="px-4 py-2 text-right">
                       {!r.deleted && (
-                        <ProposeDeleteButton
+                        <DeleteButton
                           entityKind="resource_group"
                           name={r.name}
                           onDone={() => qc.invalidateQueries({ queryKey: ["resource-groups"] })}

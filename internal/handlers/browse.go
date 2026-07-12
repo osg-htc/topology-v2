@@ -89,6 +89,46 @@ func (h *Handler) GetProjectHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, out)
 }
 
+// ServiceNamesHandler returns known service names (for the service dropdown).
+func (h *Handler) ServiceNamesHandler(w http.ResponseWriter, r *http.Request) {
+	names, err := h.queries.ListServiceNames(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, names)
+}
+
+// VONamesHandler returns active VO names (for the allowed-VOs multiselect).
+func (h *Handler) VONamesHandler(w http.ResponseWriter, r *http.Request) {
+	names, err := h.queries.ListVONames(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, names)
+}
+
+// TagsHandler returns distinct resource tags in use (for the tags multiselect).
+func (h *Handler) TagsHandler(w http.ResponseWriter, r *http.Request) {
+	tags, err := h.queries.ListDistinctTags(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, tags)
+}
+
+// ContactsHandler returns distinct known contacts (for the contact picker).
+func (h *Handler) ContactsHandler(w http.ResponseWriter, r *http.Request) {
+	contacts, err := h.queries.ListDistinctContacts(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, contacts)
+}
+
 // ListInstitutionsHandler returns cached institutions.
 func (h *Handler) ListInstitutionsHandler(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListInstitutions(r.Context())
