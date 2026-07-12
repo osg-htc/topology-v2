@@ -63,8 +63,11 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		// JSON forms of the topology read API for the frontend (snake_case).
 		r.Get("/rgsummary", h.RGSummaryJSON)
 		r.Get("/resources", h.ResourcesJSON)
-		r.Get("/sites", h.MiscSiteJSON)
-		r.Get("/facilities", h.MiscFacilityJSON)
+		r.Get("/summary", h.SummaryHandler)
+		r.Get("/resource-groups", h.ListResourceGroupsHandler)
+		r.Get("/sites", h.ListSitesHandler)
+		r.Get("/facilities", h.ListFacilitiesHandler)
+		r.Get("/institutions", h.ListInstitutionsHandler)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {
@@ -115,13 +118,18 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 			r.With(h.RequireRole(models.RoleManager, models.RoleAdministrator)).
 				Get("/audit", h.ListAuditHandler)
 
-			// Administrator-only backup/restore.
+			// Administrator-only backup/restore, settings, and user management.
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(h.RequireRole(models.RoleAdministrator))
 				r.Post("/backup", h.CreateBackup)
 				r.Get("/backups", h.ListBackups)
 				r.Post("/restore", h.RestoreBackup)
 				r.Post("/import-github", h.ImportFromGitHub)
+				r.Post("/institutions/sync", h.SyncInstitutionsHandler)
+				r.Get("/oidc-config", h.GetOIDCConfig)
+				r.Put("/oidc-config", h.SetOIDCConfig)
+				r.Get("/users", h.ListUsersHandler)
+				r.Post("/users/{id}/roles", h.SetUserRoleHandler)
 			})
 		})
 	})

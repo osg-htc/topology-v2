@@ -278,13 +278,13 @@ type resourceProposal struct {
 // applyProposal dispatches by entity kind. Resources (the primary entity) are
 // fully supported; other kinds are added as the workflow expands.
 func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID string) error {
-	if p.EntityKind != models.KindResource {
+	if !proposalschema.Known(p.EntityKind) {
 		return errUnsupportedKind
 	}
 	// Bring the payload forward to the current schema (no-op if already current)
 	// and re-validate before touching live tables. This is where a proposal that
 	// predates a schema change gets upgraded.
-	if p.Operation != models.OpDelete && proposalschema.Known(p.EntityKind) {
+	if p.Operation != models.OpDelete {
 		ver := p.SchemaVersion
 		if ver == 0 {
 			ver = 1
@@ -295,7 +295,119 @@ func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID
 		}
 		p.ProposedState = upgraded
 	}
-	return h.applyResourceProposal(ctx, p, actorID)
+	switch p.EntityKind {
+	case models.KindResource:
+		return h.applyResourceProposal(ctx, p, actorID)
+	case models.KindResourceGroup:
+		return h.applyResourceGroupProposal(ctx, p, actorID)
+	case models.KindSite:
+		return h.applySiteProposal(ctx, p, actorID)
+	case models.KindFacility:
+		return h.applyFacilityProposal(ctx, p, actorID)
+	default:
+		return errUnsupportedKind
+	}
+}
+
+type rgProposal struct {
+	Name             string `json:"name"`
+	Site             string `json:"site"`
+	Production       *bool  `json:"production"`
+	SupportCenter    string `json:"support_center"`
+	GroupDescription string `json:"group_description"`
+}
+
+func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+	if p.Operation == models.OpDelete {
+		return h.queries.SoftDeleteResourceGroupByName(ctx, p.TargetName, actorID)
+	}
+	var rp rgProposal
+	if err := json.Unmarshal(p.ProposedState, &rp); err != nil {
+		return err
+	}
+	siteID, err := h.queries.SiteIDByName(ctx, rp.Site)
+	if err != nil {
+		return errors.New("site not found: " + rp.Site)
+	}
+	// Update in place (preserving child resources); create when new.
+	if p.Operation == models.OpUpdate {
+		return h.queries.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription)
+	}
+	prod := true
+	if rp.Production != nil {
+		prod = *rp.Production
+	}
+	_, err = h.queries.InsertResourceGroup(ctx, db.ResourceGroupRow{
+		GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
+		Production: &prod, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
+		IDExplicit: false,
+	})
+	return err
+}
+
+type siteProposal struct {
+	Name         string   `json:"name"`
+	Facility     string   `json:"facility"`
+	LongName     string   `json:"long_name"`
+	Description  string   `json:"description"`
+	AddressLine1 string   `json:"address_line1"`
+	AddressLine2 string   `json:"address_line2"`
+	City         string   `json:"city"`
+	State        string   `json:"state"`
+	Country      string   `json:"country"`
+	Zipcode      string   `json:"zipcode"`
+	Latitude     *float64 `json:"latitude"`
+	Longitude    *float64 `json:"longitude"`
+}
+
+func (h *Handler) applySiteProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+	if p.Operation == models.OpDelete {
+		return h.queries.SoftDeleteSiteByName(ctx, p.TargetName, actorID)
+	}
+	var sp siteProposal
+	if err := json.Unmarshal(p.ProposedState, &sp); err != nil {
+		return err
+	}
+	facID, err := h.queries.FacilityIDByName(ctx, sp.Facility)
+	if err != nil {
+		return errors.New("facility not found: " + sp.Facility)
+	}
+	row := db.SiteRow{
+		FacilityID: facID, Name: sp.Name, LongName: sp.LongName, Description: sp.Description,
+		AddressLine1: sp.AddressLine1, AddressLine2: sp.AddressLine2, City: sp.City,
+		State: sp.State, Country: sp.Country, Zipcode: sp.Zipcode,
+		Latitude: sp.Latitude, Longitude: sp.Longitude,
+	}
+	if p.Operation == models.OpUpdate {
+		return h.queries.UpdateSiteFields(ctx, row)
+	}
+	row.TopologyID = topology.GenID(sp.Name)
+	row.IDExplicit = false
+	_, err = h.queries.InsertSite(ctx, row)
+	return err
+}
+
+type facilityProposal struct {
+	Name          string `json:"name"`
+	InstitutionID string `json:"institution_id"`
+}
+
+func (h *Handler) applyFacilityProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+	if p.Operation == models.OpDelete {
+		return h.queries.SoftDeleteFacilityByName(ctx, p.TargetName, actorID)
+	}
+	var fp facilityProposal
+	if err := json.Unmarshal(p.ProposedState, &fp); err != nil {
+		return err
+	}
+	if p.Operation == models.OpUpdate {
+		return h.queries.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID)
+	}
+	_, err := h.queries.InsertFacility(ctx, db.FacilityRow{
+		TopologyID: topology.GenID(fp.Name), Name: fp.Name,
+		InstitutionID: fp.InstitutionID, IDExplicit: false,
+	})
+	return err
 }
 
 // orEmptyJSON returns b, or an empty JSON object if b is empty.

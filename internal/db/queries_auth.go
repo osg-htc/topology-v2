@@ -92,6 +92,30 @@ func (q *Queries) FindUserByLegacyContactID(ctx context.Context, legacyID string
 	return q.GetUser(ctx, id)
 }
 
+// ListAllUsers returns all user accounts, newest first (admin user management).
+func (q *Queries) ListAllUsers(ctx context.Context) ([]*models.User, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT id, display_name, status, legacy_contact_id, is_provisioned,
+		        last_login, created_at, updated_at
+		 FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*models.User
+	for rows.Next() {
+		u := &models.User{}
+		var legacy *string
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Status, &legacy, &u.IsProvisioned,
+			&u.LastLogin, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		u.LegacyContactID = deref(legacy)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // ---- Roles ----
 
 // GetUserRoles returns the roles assigned to a user.

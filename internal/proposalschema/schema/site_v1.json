@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topology.opensciencegrid.org/proposal/site/v1",
+  "title": "Site change proposal (v1)",
+  "type": "object",
+  "required": ["name", "facility"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "facility": { "type": "string", "minLength": 1 },
+    "long_name": { "type": "string" },
+    "description": { "type": "string" },
+    "address_line1": { "type": "string" },
+    "address_line2": { "type": "string" },
+    "city": { "type": "string" },
+    "state": { "type": "string" },
+    "country": { "type": "string" },
+    "zipcode": { "type": "string" },
+    "latitude": { "type": ["number", "null"] },
+    "longitude": { "type": ["number", "null"] }
+  }
+}

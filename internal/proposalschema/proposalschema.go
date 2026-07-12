@@ -20,7 +20,10 @@ var schemaFS embed.FS
 
 // current maps each entity kind to the latest proposed_state schema version.
 var current = map[string]int{
-	"resource": 1,
+	"resource":       1,
+	"resource_group": 1,
+	"site":           1,
+	"facility":       1,
 }
 
 // compiled caches compiled validators keyed by "kind/version".
@@ -29,10 +32,12 @@ var compiled = map[string]*jsonschema.Schema{}
 // upgraders[kind][v] transforms a proposed_state from version v to v+1.
 // Register one per version bump; Upgrade chains them.
 var upgraders = map[string]map[int]func([]byte) ([]byte, error){
-	"resource": {
-		// Example for the next bump:
-		//   1: func(b []byte) ([]byte, error) { /* rename a field, add a default */ return b, nil },
-	},
+	// Register an entry per version bump, e.g.:
+	//   "resource": {1: func(b []byte) ([]byte, error) { ...; return b, nil }},
+	"resource":       {},
+	"resource_group": {},
+	"site":           {},
+	"facility":       {},
 }
 
 func init() {
