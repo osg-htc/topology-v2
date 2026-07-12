@@ -1,0 +1,16 @@
+{
+  "name": "topology-webapp",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" }
+  },
+  "forwardPorts": [8080, 3000, 5432, 9000, 9001],
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go", "bradlc.vscode-tailwindcss", "esbenp.prettier-vscode"]
+    }
+  }
+}

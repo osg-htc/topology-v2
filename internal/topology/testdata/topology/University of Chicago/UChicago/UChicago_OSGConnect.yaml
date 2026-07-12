@@ -1,0 +1,39 @@
+Production: true
+SupportCenter: Self Supported
+GroupDescription: Resources associated with the OSG Connect infrastructure
+GroupID: 1122
+Resources:
+  UChicago_OSGConnect_ap20:
+    Active: true
+    Description: The ap20.uc.osg-htc.org login node for the OSG Open Pool
+    ID: 1437
+    ContactLists:
+      Administrative Contact:
+        Primary:
+          Name: Judith Stephen
+          ID: OSG1000016
+        Secondary:
+          Name: David Jordan
+          ID: OSG1000765
+      Security Contact:
+        Primary:
+          Name: Judith Stephen
+          ID: OSG1000016
+    FQDN: ap20.uc.osg-htc.org
+    FQDNAliases:
+      - login.osg-htc.org
+    Services:
+      Submit Node:
+        Description: OS Pool access point
+      XRootD origin server:
+        Description: OSG Connect Origin Server
+        Details:
+          hidden: false
+      Pelican origin:
+        Description: Pelican Origin for ap20
+    Tags:
+      - OSPool
+    AllowedVOs:
+      - OSG
+    VOOwnership:
+      OSG: 100

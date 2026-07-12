@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/topology-server ./cmd/server"
+  bin = "./tmp/topology-server"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "frontend", "bin", "internal/frontend/dist", ".git"]
+  delay = 500
+
+[log]
+  time = true
