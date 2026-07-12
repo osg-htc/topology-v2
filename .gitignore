@@ -17,5 +17,10 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/.playwright/
+
 # Editor / OS
 .DS_Store

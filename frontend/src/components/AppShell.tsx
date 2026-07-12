@@ -18,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryKey: ["me"],
     queryFn: api.auth.me,
     retry: false,
+    enabled: !isPublic, // don't probe auth on public routes (login, invite accept)
   });
 
   useEffect(() => {

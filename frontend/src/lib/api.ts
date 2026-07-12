@@ -20,8 +20,13 @@ export async function fetchJSON<T>(
     ...init,
   });
   if (res.status === 401 && typeof window !== "undefined") {
-    const returnTo = encodeURIComponent(window.location.pathname);
-    window.location.href = `/login?return_to=${returnTo}`;
+    // Don't bounce when already on a public page (avoids a /login redirect loop).
+    const path = window.location.pathname;
+    const onPublic = path.startsWith("/login") || path.startsWith("/invites/accept");
+    if (!onPublic) {
+      const returnTo = encodeURIComponent(path);
+      window.location.href = `/login?return_to=${returnTo}`;
+    }
     throw new ApiError(401, "unauthorized");
   }
   if (!res.ok) {
