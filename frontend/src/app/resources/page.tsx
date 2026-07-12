@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { PageHeader, LinkButton, input } from "@/components/ui";
 
@@ -47,7 +48,14 @@ export default function ResourcesPage() {
             <tbody className="divide-y divide-gray-100">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium text-navy-900">{r.name}</td>
+                  <td className="px-4 py-2 font-medium">
+                    <Link
+                      href={`/resources/detail?name=${encodeURIComponent(r.name)}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2 text-gray-600">{r.fqdn}</td>
                   <td className="px-4 py-2 text-gray-500">{r.resource_group}</td>
                   <td className="px-4 py-2">

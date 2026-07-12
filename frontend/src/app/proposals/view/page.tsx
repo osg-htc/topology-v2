@@ -2,9 +2,31 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, StatusBadge, btn, btnSecondary, input } from "@/components/ui";
+import { StructuredView } from "@/components/StructuredView";
+
+// editFormHref maps a proposal to the structured form that can edit it, passing
+// enough context to prefill. Only resource groups currently prefill (via name).
+function editFormHref(kind: string, state: unknown): string | null {
+  const s = (state ?? {}) as Record<string, unknown>;
+  switch (kind) {
+    case "resource":
+      return `/proposals/new${s.resource_group ? `?rg=${encodeURIComponent(String(s.resource_group))}` : ""}`;
+    case "resource_group":
+      return "/resource-groups/new";
+    case "site":
+      return "/sites/new";
+    case "facility":
+      return "/facilities/new";
+    case "project":
+      return "/projects/new";
+    default:
+      return null;
+  }
+}
 
 function ProposalView() {
   const params = useSearchParams();
@@ -18,7 +40,6 @@ function ProposalView() {
     enabled: !!id,
   });
 
-  const [state, setState] = useState<string>("");
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -42,16 +63,8 @@ function ProposalView() {
   const isReviewer = role === "manager" || role === "administrator";
   const isCreator = session?.user.id === p.created_by;
   const editable = p.status === "draft" || p.status === "pending";
-  const currentJSON = state || JSON.stringify(p.proposed_state, null, 2);
-
-  const saveRevision = () => {
-    try {
-      const parsed = JSON.parse(currentJSON);
-      act.mutate(() => api.proposals.revise(id, { proposed_state: parsed, note }));
-    } catch {
-      setMsg("proposed_state is not valid JSON");
-    }
-  };
+  // Route "edit in form" to the matching structured create/edit form.
+  const editHref = editFormHref(p.entity_kind, p.proposed_state);
 
   return (
     <div className="p-8">
@@ -63,28 +76,23 @@ function ProposalView() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           <Card>
-            <label className="mb-2 block text-xs font-semibold uppercase text-gray-500">
-              Proposed state (schema v{p.schema_version})
-            </label>
-            <textarea
-              className={`${input} font-mono text-xs`}
-              rows={16}
-              value={currentJSON}
-              onChange={(e) => setState(e.target.value)}
-              readOnly={!editable || !(isCreator || isReviewer)}
-            />
-            {editable && (isCreator || isReviewer) && (
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  className={input}
-                  placeholder="Revision note (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <button className={btnSecondary} onClick={saveRevision} disabled={act.isPending}>
-                  Save revision
-                </button>
-              </div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">
+                Proposed change{" "}
+                <span className="font-normal text-gray-400">(schema v{p.schema_version})</span>
+              </h3>
+              {editable && isCreator && editHref && (
+                <Link href={editHref} className="text-xs text-brand-600 hover:underline">
+                  Edit in form
+                </Link>
+              )}
+            </div>
+            {p.operation === "delete" ? (
+              <p className="text-sm text-gray-600">
+                Proposes deleting <span className="font-medium">{p.target_name}</span>.
+              </p>
+            ) : (
+              <StructuredView value={p.proposed_state} />
             )}
           </Card>
 
@@ -134,6 +142,12 @@ function ProposalView() {
                   >
                     Approve &amp; apply
                   </button>
+                  <input
+                    className={input}
+                    placeholder="Reason (for reject)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
                   <button
                     className={`${btnSecondary} w-full justify-center`}
                     onClick={() => act.mutate(() => api.proposals.reject(id, note))}

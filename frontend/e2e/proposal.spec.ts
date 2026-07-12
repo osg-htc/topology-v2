@@ -13,10 +13,12 @@ test("register a resource creates a proposal", async ({ page }) => {
 
   await page.goto("/proposals/new");
   const unique = `E2E_Res_${Date.now()}`;
-  const inputs = page.locator("input");
-  await inputs.nth(0).fill(unique); // resource name
-  await inputs.nth(1).fill(rgName); // resource group (must be an existing RG)
-  await inputs.nth(2).fill(`${unique.toLowerCase()}.example.org`); // FQDN
+  await page.getByPlaceholder("e.g. UChicago_OSGConnect_ap20").fill(unique);
+  await page.getByPlaceholder("Search resource groups…").fill(rgName);
+  await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase()}.example.org`);
+  // A contact is required for a complete registration.
+  await page.getByPlaceholder("Name").first().fill("E2E Admin");
+  await page.getByPlaceholder(/Contact ID/).first().fill("OSG1000016");
 
   const submit = page.getByRole("button", { name: "Submit for review" });
   await expect(submit).toBeEnabled();
@@ -24,7 +26,9 @@ test("register a resource creates a proposal", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/proposals\/view/);
   await expect(page.getByText("pending")).toBeVisible();
-  await expect(page.getByText(unique)).toBeVisible();
+  // The structured proposed-change view shows the resource name exactly (the
+  // FQDN also contains it, so match exactly).
+  await expect(page.getByText(unique, { exact: true })).toBeVisible();
 });
 
 test("schema validation blocks an invalid resource (no FQDN)", async ({ page }) => {

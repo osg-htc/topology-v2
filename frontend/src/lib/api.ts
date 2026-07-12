@@ -121,6 +121,13 @@ export const api = {
   dashboard: () => fetchJSON<Dashboard>("/dashboard"),
   summary: () => fetchJSON<Summary>("/summary"),
   resources: () => fetchJSON<Record<string, DashboardResource>>("/resources"),
+  resourceDetail: (name: string) =>
+    fetchJSON<ResourceDetail>(`/resources/${encodeURIComponent(name)}`),
+  resourceGroupDetail: (name: string) =>
+    fetchJSON<RGDetail>(`/resource-groups/${encodeURIComponent(name)}`),
+  siteDetail: (name: string) => fetchJSON<SiteDetail>(`/sites/${encodeURIComponent(name)}`),
+  facilityDetail: (name: string) =>
+    fetchJSON<FacilityDetail>(`/facilities/${encodeURIComponent(name)}`),
   rgsummary: () => fetchJSON<unknown>("/rgsummary"),
   resourceGroups: (includeInactive = false) =>
     fetchJSON<ResourceGroup[]>(`/resource-groups${includeInactive ? "?include_inactive=1" : ""}`),
@@ -270,6 +277,69 @@ export interface ProjectDetail {
   sponsor_type: string;
   sponsor_name: string;
   sponsor?: unknown;
+}
+
+export interface ResourceContact {
+  contact_type: string;
+  rank: string;
+  name: string;
+  id: string;
+}
+export interface ResourceService {
+  name: string;
+  description: string;
+  details?: unknown;
+}
+export interface ResourceDetail {
+  name: string;
+  id: number;
+  resource_group: string;
+  site: string;
+  facility: string;
+  active: boolean;
+  description: string;
+  fqdn: string;
+  dn: string;
+  fqdn_aliases: string[];
+  tags: string[];
+  allowed_vos: string[];
+  services: ResourceService[];
+  contacts: ResourceContact[];
+  vo_ownership?: unknown;
+  wlcg_information?: unknown;
+}
+export interface RGDetail {
+  name: string;
+  group_id: number;
+  site: string;
+  facility: string;
+  production: boolean | null;
+  support_center: string;
+  group_description: string;
+  deleted: boolean;
+  resources: string[];
+}
+export interface SiteDetail {
+  name: string;
+  facility: string;
+  long_name: string;
+  description: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  country: string;
+  zipcode: string;
+  latitude?: number;
+  longitude?: number;
+  resource_groups: string[];
+}
+export interface FacilityDetail {
+  name: string;
+  facility_id: number;
+  institution_id: string;
+  deleted: boolean;
+  sites: string[];
 }
 
 export interface OIDCConfig {

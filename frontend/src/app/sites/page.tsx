@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { PageHeader, LinkButton, Card, input } from "@/components/ui";
 import { InactiveToggle } from "@/components/BrowseControls";
@@ -58,8 +59,13 @@ export default function SitesPage() {
             <tbody className="divide-y divide-gray-100">
               {rows.map((r) => (
                 <tr key={r.name} className={r.deleted ? "opacity-50" : ""}>
-                  <td className="px-4 py-2 font-medium text-navy-900">
-                    {r.name}
+                  <td className="px-4 py-2 font-medium">
+                    <Link
+                      href={`/sites/detail?name=${encodeURIComponent(r.name)}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {r.name}
+                    </Link>
                     {r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}
                   </td>
                   <td className="px-4 py-2 text-gray-600">{r.facility}</td>

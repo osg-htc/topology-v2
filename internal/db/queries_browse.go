@@ -140,6 +140,51 @@ func (q *Queries) ListBrowseFacilities(ctx context.Context, includeDeleted bool)
 	return out, rows.Err()
 }
 
+// ResourceDetail is the full detail of a single resource (for the detail page).
+type ResourceDetail struct {
+	Name            string   `json:"name"`
+	TopologyID      int64    `json:"id"`
+	ResourceGroup   string   `json:"resource_group"`
+	Site            string   `json:"site"`
+	Facility        string   `json:"facility"`
+	Active          *bool    `json:"active"`
+	Description     string   `json:"description"`
+	FQDN            string   `json:"fqdn"`
+	DN              string   `json:"dn"`
+	FQDNAliases     []string `json:"fqdn_aliases"`
+	Tags            []string `json:"tags"`
+	AllowedVOs      []string `json:"allowed_vos"`
+	VOOwnership     []byte   `json:"-"`
+	WLCGInformation []byte   `json:"-"`
+	Deleted         bool     `json:"deleted"`
+}
+
+// GetResourceDetail returns a single resource (active) with its parentage.
+func (q *Queries) GetResourceDetail(ctx context.Context, name string) (*ResourceDetail, error) {
+	d := &ResourceDetail{}
+	err := q.pool.QueryRow(ctx,
+		`SELECT r.name, r.topology_id, rg.name, s.name, f.name, r.active,
+		        COALESCE(r.description,''), r.fqdn, COALESCE(r.dn,''),
+		        r.fqdn_aliases, r.tags, r.allowed_vos, r.vo_ownership, r.wlcg_information
+		 FROM resources r
+		 JOIN resource_groups rg ON rg.id = r.resource_group_id
+		 JOIN sites s ON s.id = rg.site_id
+		 JOIN facilities f ON f.id = s.facility_id
+		 WHERE r.name = $1 AND r.deleted_at IS NULL`, name).
+		Scan(&d.Name, &d.TopologyID, &d.ResourceGroup, &d.Site, &d.Facility, &d.Active,
+			&d.Description, &d.FQDN, &d.DN, &d.FQDNAliases, &d.Tags, &d.AllowedVOs,
+			&d.VOOwnership, &d.WLCGInformation)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return d, nil
+}
+
+// ResourceIDForName returns the resource id (active) for contact/service lookups.
+func (q *Queries) ResourceIDForName(ctx context.Context, name string) (string, error) {
+	return q.ResourceIDByName(ctx, name)
+}
+
 // BrowseProject is a project list row.
 type BrowseProject struct {
 	Name           string `json:"name"`
@@ -199,6 +244,64 @@ func (q *Queries) SoftDeleteProjectByName(ctx context.Context, name, byUser stri
 		`UPDATE projects SET deleted_at=NOW(), deleted_by=$2 WHERE name=$1 AND deleted_at IS NULL`,
 		name, nullString(byUser))
 	return err
+}
+
+// childNames runs a name-listing query and collects the results.
+func (q *Queries) childNames(ctx context.Context, sql string, arg string) ([]string, error) {
+	rows, err := q.pool.Query(ctx, sql, arg)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// ResourceNamesInRG lists active resource names in a resource group.
+func (q *Queries) ResourceNamesInRG(ctx context.Context, rgName string) ([]string, error) {
+	return q.childNames(ctx,
+		`SELECT r.name FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
+		 WHERE rg.name=$1 AND r.deleted_at IS NULL ORDER BY r.name`, rgName)
+}
+
+// RGNamesInSite lists active resource-group names at a site.
+func (q *Queries) RGNamesInSite(ctx context.Context, siteName string) ([]string, error) {
+	return q.childNames(ctx,
+		`SELECT rg.name FROM resource_groups rg JOIN sites s ON s.id = rg.site_id
+		 WHERE s.name=$1 AND rg.deleted_at IS NULL ORDER BY rg.name`, siteName)
+}
+
+// SiteNamesInFacility lists active site names in a facility.
+func (q *Queries) SiteNamesInFacility(ctx context.Context, facName string) ([]string, error) {
+	return q.childNames(ctx,
+		`SELECT s.name FROM sites s JOIN facilities f ON f.id = s.facility_id
+		 WHERE f.name=$1 AND s.deleted_at IS NULL ORDER BY s.name`, facName)
+}
+
+// GetSiteDetail returns a single site's full fields with its facility name.
+func (q *Queries) GetSiteDetail(ctx context.Context, name string) (*SiteRow, string, error) {
+	r := &SiteRow{}
+	var facName string
+	err := q.pool.QueryRow(ctx,
+		`SELECT s.name, f.name, COALESCE(s.long_name,''), COALESCE(s.description,''),
+		        COALESCE(s.address_line1,''), COALESCE(s.address_line2,''), COALESCE(s.city,''),
+		        COALESCE(s.state,''), COALESCE(s.country,''), COALESCE(s.zipcode,''),
+		        s.latitude, s.longitude
+		 FROM sites s JOIN facilities f ON f.id = s.facility_id
+		 WHERE s.name=$1 AND s.deleted_at IS NULL`, name).
+		Scan(&r.Name, &facName, &r.LongName, &r.Description, &r.AddressLine1, &r.AddressLine2,
+			&r.City, &r.State, &r.Country, &r.Zipcode, &r.Latitude, &r.Longitude)
+	if err != nil {
+		return nil, "", ErrNotFound
+	}
+	return r, facName, nil
 }
 
 // Institution is a cached institution registry row.
