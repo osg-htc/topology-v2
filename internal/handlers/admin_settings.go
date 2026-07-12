@@ -127,7 +127,7 @@ func (h *Handler) SetUserRoleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Role {
-	case models.RoleAdministrator, models.RoleManager, models.RoleUser:
+	case models.RoleAdministrator, models.RoleManager, models.RoleUser, models.RoleContactReader:
 	default:
 		respondError(w, http.StatusBadRequest, "invalid role")
 		return

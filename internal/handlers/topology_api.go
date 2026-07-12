@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v3"
 
+	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/xmlapi"
 )
 
@@ -78,10 +79,11 @@ func parseFilters(r *http.Request) xmlapi.Filters {
 	return f
 }
 
-// includePII reports whether contact PII (emails) may be exposed. For now only
-// an authenticated session unlocks it; anonymous clients see Name + CILogonID.
+// includePII reports whether contact PII (emails, ids) may be exposed. Only a
+// session holding the contact_reader capability (or manager/administrator)
+// unlocks it; everyone else — including anonymous clients — sees names only.
 func (h *Handler) includePII(r *http.Request) bool {
-	return userFromContext(r.Context()) != nil
+	return models.HasContactReader(rolesFromContext(r.Context()))
 }
 
 // RGSummaryXML serves /rgsummary/xml.

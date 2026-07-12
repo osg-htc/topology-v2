@@ -45,7 +45,9 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 	r.Get("/healthz", h.Healthz)
 
 	// Legacy-compatible topology web API (public, mirrors the existing paths).
-	r.Get("/rgsummary/xml", h.RGSummaryXML)
+	// rgsummary carries contact info, so it uses OptionalAuth: anonymous clients
+	// see names only; a signed-in contact_reader sees contact PII.
+	r.With(h.OptionalAuth).Get("/rgsummary/xml", h.RGSummaryXML)
 	r.Get("/rgdowntime/xml", h.RGDowntimeXML)
 	r.Get("/miscresource/json", h.MiscResourceJSON)
 	r.Get("/miscsite/json", h.MiscSiteJSON)
@@ -61,7 +63,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Get("/health", h.Healthz)
 
 		// JSON forms of the topology read API for the frontend (snake_case).
-		r.Get("/rgsummary", h.RGSummaryJSON)
+		r.With(h.OptionalAuth).Get("/rgsummary", h.RGSummaryJSON)
 		r.Get("/resources", h.ResourcesJSON)
 		r.Get("/resources/{name}", h.ResourceDetailHandler)
 		r.Get("/summary", h.SummaryHandler)

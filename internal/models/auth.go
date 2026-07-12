@@ -3,18 +3,35 @@ package models
 
 import "time"
 
-// Role constants. A user may hold several; a session carries the highest.
+// Role constants. A user may hold several; a session carries the highest
+// privilege level, but contact_reader is an orthogonal *capability* (see
+// HasContactReader) rather than a level.
 const (
 	RoleAdministrator = "administrator"
 	RoleManager       = "manager"
 	RoleUser          = "user"
+	// RoleContactReader may view contact PII (emails, ids). Without it, only
+	// contact names are visible.
+	RoleContactReader = "contact_reader"
 )
 
-// roleRank orders roles from most to least privileged.
+// roleRank orders the privilege-level roles from most to least privileged.
+// contact_reader is intentionally absent — it is a capability, not a level.
 var roleRank = map[string]int{
 	RoleAdministrator: 3,
 	RoleManager:       2,
 	RoleUser:          1,
+}
+
+// HasContactReader reports whether the role set may view contact PII. Managers
+// and administrators always can; others need the contact_reader role.
+func HasContactReader(roles []string) bool {
+	for _, r := range roles {
+		if r == RoleContactReader || r == RoleManager || r == RoleAdministrator {
+			return true
+		}
+	}
+	return false
 }
 
 // EffectiveRole returns the highest-privilege role in the set, or RoleUser.

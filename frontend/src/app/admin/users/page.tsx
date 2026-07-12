@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, AdminUser } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 
-const ROLES = ["administrator", "manager", "user"];
+const ROLES = ["administrator", "manager", "user", "contact_reader"];
 
 export default function AdminUsersPage() {
   const qc = useQueryClient();

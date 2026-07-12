@@ -63,6 +63,36 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// OptionalAuth loads the session/user/roles into the context if a valid session
+// cookie is present, but does NOT require authentication. Used on otherwise-
+// public read endpoints so contact PII can be unlocked for a contact_reader.
+func (h *Handler) OptionalAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie(sessionCookieName)
+		if err != nil || cookie.Value == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx := r.Context()
+		session, err := h.queries.GetSessionByTokenHash(ctx, hashToken(cookie.Value))
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		user, err := h.queries.GetUser(ctx, session.UserID)
+		if err != nil || user.Status != "active" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		roles, _ := h.queries.GetUserRoles(ctx, user.ID)
+		user.Roles = roles
+		ctx = context.WithValue(ctx, ctxSession, session)
+		ctx = context.WithValue(ctx, ctxUser, user)
+		ctx = context.WithValue(ctx, ctxRoles, roles)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // RequireRole returns middleware that permits only sessions whose effective
 // role is one of the allowed roles. Administrator always passes.
 func (h *Handler) RequireRole(allowed ...string) func(http.Handler) http.Handler {

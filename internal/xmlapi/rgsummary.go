@@ -371,11 +371,11 @@ func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor
 			order = append(order, c.ContactType)
 		}
 		cx := ContactXML{Name: c.ContactName, ContactRank: c.Rank}
-		if strings.HasPrefix(c.ContactID, "OSG") {
+		// Contact ids and emails are PII — only exposed to a contact_reader.
+		// Anonymous / non-privileged clients see the name only.
+		if includePII && strings.HasPrefix(c.ContactID, "OSG") {
 			cx.CILogonID = c.ContactID
 		}
-		// Email is auth-gated: only for authorized (authenticated) requests, and
-		// only when the contact resolves to an account with a decryptable email.
 		if includePII && enc != nil && c.ContactID != "" {
 			if ct, wrapped, ok := q.EncryptedEmailByContactID(ctx, c.ContactID); ok {
 				if email, err := enc.DecryptPII(&crypto.EncryptedField{Ciphertext: ct, WrappedDEK: wrapped}); err == nil {
