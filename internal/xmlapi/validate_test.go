@@ -37,6 +37,15 @@ func TestXMLValidatesAgainstXSD(t *testing.T) {
 	if err := topology.ImportTree(ctx, q, root); err != nil {
 		t.Fatalf("ImportTree: %v", err)
 	}
+	// Import VOs/projects too (from a repo checkout) so their XML is validated.
+	if repo := os.Getenv("TOPOLOGY_TEST_REPO_ROOT"); repo != "" {
+		if err := topology.ImportVOs(ctx, q, filepath.Join(repo, "virtual-organizations")); err != nil {
+			t.Fatalf("ImportVOs: %v", err)
+		}
+		if err := topology.ImportProjects(ctx, q, filepath.Join(repo, "projects")); err != nil {
+			t.Fatalf("ImportProjects: %v", err)
+		}
+	}
 
 	summary, err := xmlapi.BuildResourceSummary(ctx, q, nil, xmlapi.Filters{}, false)
 	if err != nil {
@@ -49,6 +58,24 @@ func TestXMLValidatesAgainstXSD(t *testing.T) {
 		t.Fatalf("BuildDowntimes: %v", err)
 	}
 	validate(t, q, "rgdowntime.xsd", dts)
+
+	// The VOSummary/Projects XSDs require at least one VO/Project, so only
+	// validate when data was imported (i.e. a repo root was supplied).
+	vos, err := xmlapi.BuildVOSummary(ctx, q)
+	if err != nil {
+		t.Fatalf("BuildVOSummary: %v", err)
+	}
+	if len(vos.VOs) > 0 {
+		validate(t, q, "vosummary.xsd", vos)
+	}
+
+	projects, err := xmlapi.BuildProjects(ctx, q)
+	if err != nil {
+		t.Fatalf("BuildProjects: %v", err)
+	}
+	if len(projects.Projects) > 0 {
+		validate(t, q, "miscproject.xsd", projects)
+	}
 }
 
 func validate(t *testing.T, _ *db.Queries, xsd string, v any) {

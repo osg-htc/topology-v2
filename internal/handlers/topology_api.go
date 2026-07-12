@@ -164,6 +164,26 @@ func (h *Handler) MiscFacilityJSON(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, out)
 }
 
+// VOSummaryXML serves /vosummary/xml.
+func (h *Handler) VOSummaryXML(w http.ResponseWriter, r *http.Request) {
+	summary, err := xmlapi.BuildVOSummary(r.Context(), h.queries)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeXML(w, summary)
+}
+
+// MiscProjectXML serves /miscproject/xml.
+func (h *Handler) MiscProjectXML(w http.ResponseWriter, r *http.Request) {
+	projects, err := xmlapi.BuildProjects(r.Context(), h.queries)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeXML(w, projects)
+}
+
 // VOSummaryJSON serves virtual organizations keyed by name (parsed from the
 // stored document form).
 func (h *Handler) VOSummaryJSON(w http.ResponseWriter, r *http.Request) {

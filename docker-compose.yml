@@ -16,7 +16,11 @@ services:
       POSTGRES_PASSWORD: topology
       POSTGRES_DB: topology
     ports:
-      - "5432:5432"
+      # Host ports are deliberately non-default to avoid clashing with other
+      # local stacks (the app reaches these over the internal network, so these
+      # mappings are only for optional external access). Override in a
+      # docker-compose.override.yml if you like.
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,8 +36,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # MinIO console
+      - "9100:9000" # S3 API (host 9100 to avoid clashes)
+      - "9101:9001" # MinIO console -> http://localhost:9101
     volumes:
       - miniodata:/data
     healthcheck:

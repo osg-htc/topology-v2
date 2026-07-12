@@ -24,9 +24,15 @@ To load real data once you're in: go to **Admin → Backup & restore → Import 
 GitHub** (pulls `opensciencegrid/topology`). Or, from a checkout of the topology
 repo, run the importer directly (see below).
 
-Other endpoints while it's up: MinIO console at http://localhost:9001
+Other endpoints while it's up: MinIO console at http://localhost:9101
 (minioadmin / minioadmin). Stop with `make down` (keeps data) or `make
 down-clean` (wipes volumes).
+
+Host ports are deliberately non-default to avoid clashing with other local
+stacks: app **:8080**, Postgres **:55432**, MinIO API **:9100**, console
+**:9101** (the app reaches Postgres/MinIO over the internal Docker network, so
+those mappings are only for optional external access). If :8080 is taken, add a
+`docker-compose.override.yml` remapping the `app` port.
 
 ### Play with the API directly
 
