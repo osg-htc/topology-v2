@@ -25,6 +25,7 @@ export default function FacilitiesPage() {
     <div className="p-8">
       <PageHeader
         title="Facilities"
+        description="A facility is the top-level organization (a university or lab) that owns one or more sites. It links to an institution in the OSG registry (OSG IID ↔ ROR)."
         action={<LinkButton href="/facilities/new">New facility</LinkButton>}
       />
       <div className="mb-4 flex items-center gap-4">

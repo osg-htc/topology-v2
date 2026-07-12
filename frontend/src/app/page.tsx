@@ -78,9 +78,7 @@ const TILES: { key: keyof import("@/lib/api").Summary; label: string; href: stri
   { key: "resource_groups", label: "Resource groups", href: "/resource-groups" },
   { key: "sites", label: "Sites", href: "/sites" },
   { key: "facilities", label: "Facilities", href: "/facilities" },
-  { key: "institutions", label: "Institutions", href: "/institutions" },
-  { key: "vos", label: "VOs", href: "/resources" },
-  { key: "projects", label: "Projects", href: "/resources" },
+  { key: "projects", label: "Projects", href: "/projects" },
 ];
 
 function SummaryTiles() {
@@ -91,7 +89,7 @@ function SummaryTiles() {
         All topology
       </h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {TILES.filter((t) => t.key !== "vos" && t.key !== "projects").map((t) => (
+        {TILES.map((t) => (
           <Link
             key={t.key}
             href={t.href}

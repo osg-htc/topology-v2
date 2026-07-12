@@ -22,6 +22,7 @@ export default function ResourcesPage() {
     <div className="p-8">
       <PageHeader
         title="Resources"
+        description="Resources are the individual services and endpoints OSG knows about (a CE, an access point, an XRootD/Pelican origin or cache, a perfSONAR node, …). Each resource belongs to a resource group and declares its FQDN, services, and contacts."
         action={<LinkButton href="/proposals/new">Register a resource</LinkButton>}
       />
       <input

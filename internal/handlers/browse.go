@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 )
 
@@ -53,6 +54,39 @@ func (h *Handler) ListFacilitiesHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	respondJSON(w, http.StatusOK, rows)
+}
+
+// ListProjectsBrowseHandler lists projects for the management UI.
+func (h *Handler) ListProjectsBrowseHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queries.ListBrowseProjects(r.Context(), includeInactive(r))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, rows)
+}
+
+// GetProjectHandler returns one project's full detail.
+func (h *Handler) GetProjectHandler(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	p, err := h.queries.GetProjectByName(r.Context(), name)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	out := map[string]any{
+		"name": p.Name, "id": p.ProjectID, "description": p.Description,
+		"department": p.Department, "field_of_science": p.FieldOfScience,
+		"field_of_science_id": p.FieldOfScienceID, "organization": p.Organization,
+		"pi_name": p.PIName, "institution_id": p.InstitutionID,
+		"sponsor_type": p.SponsorType, "sponsor_name": p.SponsorName,
+	}
+	if len(p.Sponsor) > 0 {
+		var s any
+		_ = json.Unmarshal(p.Sponsor, &s)
+		out["sponsor"] = s
+	}
+	respondJSON(w, http.StatusOK, out)
 }
 
 // ListInstitutionsHandler returns cached institutions.

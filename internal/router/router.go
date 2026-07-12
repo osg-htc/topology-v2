@@ -67,6 +67,8 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Get("/resource-groups", h.ListResourceGroupsHandler)
 		r.Get("/sites", h.ListSitesHandler)
 		r.Get("/facilities", h.ListFacilitiesHandler)
+		r.Get("/projects", h.ListProjectsBrowseHandler)
+		r.Get("/projects/{name}", h.GetProjectHandler)
 		r.Get("/institutions", h.ListInstitutionsHandler)
 
 		// Auth (public endpoints).

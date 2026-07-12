@@ -51,8 +51,8 @@ export default function AdminUsersPage() {
                     )}
                   </div>
                   <div className="mt-1 space-y-0.5 text-xs text-gray-500">
-                    {u.identities.length === 0 && <div>no linked identities</div>}
-                    {u.identities.map((id) => (
+                    {(u.identities ?? []).length === 0 && <div>no linked identities</div>}
+                    {(u.identities ?? []).map((id) => (
                       <div key={id.id}>
                         {id.email || id.subject}
                         {id.cilogon_id ? ` · ${id.cilogon_id}` : ""}

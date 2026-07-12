@@ -24,6 +24,7 @@ var current = map[string]int{
 	"resource_group": 1,
 	"site":           1,
 	"facility":       1,
+	"project":        1,
 }
 
 // compiled caches compiled validators keyed by "kind/version".
@@ -38,6 +39,7 @@ var upgraders = map[string]map[int]func([]byte) ([]byte, error){
 	"resource_group": {},
 	"site":           {},
 	"facility":       {},
+	"project":        {},
 }
 
 func init() {

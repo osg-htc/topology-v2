@@ -140,6 +140,67 @@ func (q *Queries) ListBrowseFacilities(ctx context.Context, includeDeleted bool)
 	return out, rows.Err()
 }
 
+// BrowseProject is a project list row.
+type BrowseProject struct {
+	Name           string `json:"name"`
+	ProjectID      string `json:"project_id"`
+	PIName         string `json:"pi_name"`
+	Organization   string `json:"organization"`
+	FieldOfScience string `json:"field_of_science"`
+	SponsorType    string `json:"sponsor_type"`
+	SponsorName    string `json:"sponsor_name"`
+	Deleted        bool   `json:"deleted"`
+}
+
+// ListBrowseProjects lists projects (active only unless includeDeleted).
+func (q *Queries) ListBrowseProjects(ctx context.Context, includeDeleted bool) ([]BrowseProject, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT name, COALESCE(project_id,''), COALESCE(pi_name,''), COALESCE(organization,''),
+		        COALESCE(field_of_science,''), COALESCE(sponsor_type,''), COALESCE(sponsor_name,''),
+		        deleted_at IS NOT NULL
+		 FROM projects WHERE ($1 OR deleted_at IS NULL) ORDER BY name`, includeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]BrowseProject, 0)
+	for rows.Next() {
+		var r BrowseProject
+		if err := rows.Scan(&r.Name, &r.ProjectID, &r.PIName, &r.Organization,
+			&r.FieldOfScience, &r.SponsorType, &r.SponsorName, &r.Deleted); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// GetProjectByName returns a single project's full row (for detail/edit).
+func (q *Queries) GetProjectByName(ctx context.Context, name string) (*ProjectRow, error) {
+	r := &ProjectRow{}
+	err := q.pool.QueryRow(ctx,
+		`SELECT name, COALESCE(project_id,''), COALESCE(description,''), COALESCE(department,''),
+		        COALESCE(field_of_science,''), COALESCE(field_of_science_id,''),
+		        COALESCE(organization,''), COALESCE(pi_name,''), COALESCE(institution_id,''),
+		        sponsor, COALESCE(sponsor_type,''), COALESCE(sponsor_name,''), extra
+		 FROM projects WHERE name=$1 AND deleted_at IS NULL`, name).
+		Scan(&r.Name, &r.ProjectID, &r.Description, &r.Department, &r.FieldOfScience,
+			&r.FieldOfScienceID, &r.Organization, &r.PIName, &r.InstitutionID,
+			&r.Sponsor, &r.SponsorType, &r.SponsorName, &r.Extra)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return r, nil
+}
+
+// SoftDeleteProjectByName soft-deletes a project.
+func (q *Queries) SoftDeleteProjectByName(ctx context.Context, name, byUser string) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE projects SET deleted_at=NOW(), deleted_by=$2 WHERE name=$1 AND deleted_at IS NULL`,
+		name, nullString(byUser))
+	return err
+}
+
 // Institution is a cached institution registry row.
 type Institution struct {
 	IIDURI string `json:"id"`

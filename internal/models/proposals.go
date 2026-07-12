@@ -28,6 +28,7 @@ const (
 	KindResourceGroup = "resource_group"
 	KindSite          = "site"
 	KindFacility      = "facility"
+	KindProject       = "project"
 )
 
 // Proposal is a living draft of a create/update/delete change to a topology

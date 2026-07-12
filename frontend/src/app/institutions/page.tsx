@@ -35,6 +35,7 @@ export default function InstitutionsPage() {
     <div className="p-8">
       <PageHeader
         title="Institutions"
+        description="The institution registry (OSG IID ↔ ROR) is maintained externally and cached here. Facilities reference an institution. Administrators can refresh the cache."
         action={
           isAdmin ? (
             <button className={btn} disabled={sync.isPending} onClick={() => sync.mutate()}>

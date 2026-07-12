@@ -23,7 +23,11 @@ export default function SitesPage() {
 
   return (
     <div className="p-8">
-      <PageHeader title="Sites" action={<LinkButton href="/sites/new">New site</LinkButton>} />
+      <PageHeader
+        title="Sites"
+        description="A site is a physical location (campus, data center) belonging to a facility, with address and coordinates. Resource groups live at a site."
+        action={<LinkButton href="/sites/new">New site</LinkButton>}
+      />
       <div className="mb-4 flex items-center gap-4">
         <input
           className={`${input} max-w-md`}

@@ -304,9 +304,59 @@ func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID
 		return h.applySiteProposal(ctx, p, actorID)
 	case models.KindFacility:
 		return h.applyFacilityProposal(ctx, p, actorID)
+	case models.KindProject:
+		return h.applyProjectProposal(ctx, p, actorID)
 	default:
 		return errUnsupportedKind
 	}
+}
+
+type projectProposal struct {
+	Name             string                 `json:"name"`
+	ID               string                 `json:"id"`
+	Description      string                 `json:"description"`
+	Department       string                 `json:"department"`
+	FieldOfScience   string                 `json:"field_of_science"`
+	FieldOfScienceID string                 `json:"field_of_science_id"`
+	Organization     string                 `json:"organization"`
+	PIName           string                 `json:"pi_name"`
+	InstitutionID    string                 `json:"institution_id"`
+	Sponsor          map[string]interface{} `json:"sponsor"`
+}
+
+func (h *Handler) applyProjectProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+	if p.Operation == models.OpDelete {
+		return h.queries.SoftDeleteProjectByName(ctx, p.TargetName, actorID)
+	}
+	var pp projectProposal
+	if err := json.Unmarshal(p.ProposedState, &pp); err != nil {
+		return err
+	}
+	sType, sName := sponsorTypeName(pp.Sponsor)
+	sponsorJSON, _ := json.Marshal(pp.Sponsor)
+	if len(pp.Sponsor) == 0 {
+		sponsorJSON = nil
+	}
+	// UpsertProject handles both create and update (keyed by active name).
+	return h.queries.UpsertProject(ctx, db.ProjectRow{
+		Name: pp.Name, ProjectID: pp.ID, Description: pp.Description, Department: pp.Department,
+		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
+		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
+		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName,
+	})
+}
+
+// sponsorTypeName extracts the sponsor kind + name from a sponsor block.
+func sponsorTypeName(sponsor map[string]interface{}) (string, string) {
+	for k, v := range sponsor {
+		if m, ok := v.(map[string]interface{}); ok {
+			if name, ok := m["Name"].(string); ok {
+				return k, name
+			}
+		}
+		return k, ""
+	}
+	return "", ""
 }
 
 type rgProposal struct {

@@ -92,8 +92,11 @@ func (h *Handler) ListUsersHandler(w http.ResponseWriter, r *http.Request) {
 	out := make([]adminUserDTO, 0, len(users))
 	for _, u := range users {
 		roles, _ := h.queries.GetUserRoles(ctx, u.ID)
+		if roles == nil {
+			roles = []string{}
+		}
 		u.Roles = roles
-		dto := adminUserDTO{User: *u}
+		dto := adminUserDTO{User: *u, Identities: []adminIdentityDTO{}}
 		rows, _ := h.queries.ListUserIdentities(ctx, u.ID)
 		for _, row := range rows {
 			id := row.Identity()

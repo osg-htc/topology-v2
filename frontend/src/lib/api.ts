@@ -129,6 +129,9 @@ export const api = {
   facilities: (includeInactive = false) =>
     fetchJSON<Facility[]>(`/facilities${includeInactive ? "?include_inactive=1" : ""}`),
   institutions: () => fetchJSON<Institution[]>("/institutions"),
+  projects: (includeInactive = false) =>
+    fetchJSON<Project[]>(`/projects${includeInactive ? "?include_inactive=1" : ""}`),
+  project: (name: string) => fetchJSON<ProjectDetail>(`/projects/${encodeURIComponent(name)}`),
   proposals: {
     mine: () => fetchJSON<Proposal[]>("/proposals/mine"),
     pending: () => fetchJSON<Proposal[]>("/proposals/pending"),
@@ -241,6 +244,32 @@ export interface Institution {
   id: string;
   name: string;
   ror_id: string;
+}
+
+export interface Project {
+  name: string;
+  project_id: string;
+  pi_name: string;
+  organization: string;
+  field_of_science: string;
+  sponsor_type: string;
+  sponsor_name: string;
+  deleted: boolean;
+}
+
+export interface ProjectDetail {
+  name: string;
+  id: string;
+  description: string;
+  department: string;
+  field_of_science: string;
+  field_of_science_id: string;
+  organization: string;
+  pi_name: string;
+  institution_id: string;
+  sponsor_type: string;
+  sponsor_name: string;
+  sponsor?: unknown;
 }
 
 export interface OIDCConfig {

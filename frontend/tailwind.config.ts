@@ -7,24 +7,32 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // OSG-HTC-inspired green primary.
         brand: {
-          50: "#eef7ea",
-          100: "#d6ecc9",
-          200: "#b7dc9f",
-          300: "#95cb72",
-          400: "#79bd4f",
-          500: "#5fa834",
-          600: "#4d8b31",
-          700: "#3d6e28",
-          800: "#2f5420",
-          900: "#25401a",
-          950: "#12230c",
+          50: "#e8f5ec",
+          100: "#c7e7d1",
+          200: "#9fd6b2",
+          300: "#6fc08e",
+          400: "#43a96c",
+          500: "#1f9350",
+          600: "#127a41",
+          700: "#0f6335",
+          800: "#0d4e2b",
+          900: "#0b3d23",
+          950: "#052414",
         },
+        // Deep green for the sidebar / dark surfaces (replaces the old navy).
         navy: {
-          700: "#1e293b",
-          800: "#172033",
-          900: "#0f172a",
-          950: "#080f1f",
+          700: "#123a26",
+          800: "#0d2c1d",
+          900: "#092015",
+          950: "#04120b",
+        },
+        // Gold accent (OSG highlight).
+        gold: {
+          400: "#f4b740",
+          500: "#e6a51e",
+          600: "#c98a12",
         },
       },
     },
