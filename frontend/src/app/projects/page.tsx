@@ -2,101 +2,63 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, Project } from "@/lib/api";
 import { PageHeader, LinkButton, Card, input } from "@/components/ui";
 import { InactiveToggle } from "@/components/BrowseControls";
-import { useIsReviewer, DeleteButton } from "@/components/entityActions";
+import { DataTable } from "@/components/DataTable";
+import { useIsReviewer } from "@/components/entityActions";
 
 export default function ProjectsPage() {
   const [inactive, setInactive] = useState(false);
   const [q, setQ] = useState("");
   const isReviewer = useIsReviewer();
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["projects", inactive],
-    queryFn: () => api.projects(inactive),
-  });
+  const { data, isLoading } = useQuery({ queryKey: ["projects", inactive], queryFn: () => api.projects(inactive) });
 
-  const rows = (data ?? []).filter(
-    (r) =>
-      (r.name ?? "").toLowerCase().includes(q.toLowerCase()) ||
-      (r.organization ?? "").toLowerCase().includes(q.toLowerCase()) ||
-      (r.pi_name ?? "").toLowerCase().includes(q.toLowerCase()),
-  );
+  const rows = (data ?? [])
+    .filter(
+      (r) =>
+        (r.name ?? "").toLowerCase().includes(q.toLowerCase()) ||
+        (r.organization ?? "").toLowerCase().includes(q.toLowerCase()) ||
+        (r.pi_name ?? "").toLowerCase().includes(q.toLowerCase()),
+    )
+    .slice(0, 500);
 
   return (
     <div className="p-8">
       <PageHeader
         title="Projects"
-        description="Projects describe the science and PIs that use OSG resources. Each has a field of science, an organization/PI, an institution, and a sponsor (a campus grid or a VO)."
+        description="Projects describe the science and PIs that use OSG resources — field of science, organization/PI, institution, and a sponsor (campus grid or VO). Click a row to expand; use the icons to open, edit, or delete."
         action={<LinkButton href="/projects/new">New project</LinkButton>}
       />
       <div className="mb-4 flex items-center gap-4">
-        <input
-          className={`${input} max-w-md`}
-          placeholder="Search by name, organization, or PI…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+        <input className={`${input} max-w-md`} placeholder="Search by name, organization, or PI…" value={q} onChange={(e) => setQ(e.target.value)} />
         <InactiveToggle value={inactive} onChange={setInactive} />
       </div>
       {isLoading ? (
         <p className="text-gray-400">Loading…</p>
       ) : rows.length === 0 ? (
-        <Card>
-          <p className="text-sm text-gray-500">No projects.</p>
-        </Card>
+        <Card><p className="text-sm text-gray-500">No projects.</p></Card>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">PI</th>
-                <th className="px-4 py-2">Organization</th>
-                <th className="px-4 py-2">Field of science</th>
-                <th className="px-4 py-2">Sponsor</th>
-                {isReviewer && <th className="px-4 py-2"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.slice(0, 500).map((r) => (
-                <tr key={r.name} className={r.deleted ? "opacity-50" : ""}>
-                  <td className="px-4 py-2 font-medium">
-                    <Link
-                      href={`/projects/detail?name=${encodeURIComponent(r.name)}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {r.name}
-                    </Link>
-                    {r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">{r.pi_name}</td>
-                  <td className="px-4 py-2 text-gray-500">{r.organization}</td>
-                  <td className="px-4 py-2 text-gray-500">{r.field_of_science}</td>
-                  <td className="px-4 py-2 text-gray-500">
-                    {r.sponsor_name ? `${r.sponsor_name}` : "—"}
-                  </td>
-                  {isReviewer && (
-                    <td className="px-4 py-2 text-right">
-                      {!r.deleted && (
-                        <DeleteButton
-                          entityKind="project"
-                          name={r.name}
-                          onDone={() => qc.invalidateQueries({ queryKey: ["projects"] })}
-                        />
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {rows.length > 500 && (
-            <p className="p-3 text-xs text-gray-400">Showing first 500 of {rows.length}.</p>
-          )}
-        </div>
+        <DataTable<Project>
+          rows={rows}
+          rowKey={(r) => r.name}
+          canDelete={isReviewer}
+          columns={[
+            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
+            { header: "PI", cell: (r) => <span className="text-gray-600">{r.pi_name}</span> },
+            { header: "Organization", cell: (r) => <span className="text-gray-500">{r.organization}</span> },
+            { header: "Field of science", cell: (r) => <span className="text-gray-500">{r.field_of_science}</span> },
+            { header: "Sponsor", cell: (r) => <span className="text-gray-500">{r.sponsor_name || "—"}</span> },
+          ]}
+          actions={(r) => ({
+            detailHref: `/projects/detail?name=${encodeURIComponent(r.name)}`,
+            editHref: `/projects/new?edit=${encodeURIComponent(r.name)}`,
+            entityKind: "project",
+            name: r.name,
+            onChanged: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+          })}
+        />
       )}
     </div>
   );

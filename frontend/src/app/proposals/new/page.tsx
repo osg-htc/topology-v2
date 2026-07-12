@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -24,7 +24,8 @@ type ServiceRow = { name: string; description: string };
 function NewResourceForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [name, setName] = useState("");
+  const editName = params.get("edit");
+  const [name, setName] = useState(editName ?? "");
   const [rg, setRg] = useState(params.get("rg") ?? "");
   const [hostname, setHostname] = useState("");
   const [description, setDescription] = useState("");
@@ -41,6 +42,30 @@ function NewResourceForm() {
   const [advancedJSON, setAdvancedJSON] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Edit mode: load the existing resource and prefill.
+  const { data: editData } = useQuery({
+    queryKey: ["resource-detail", editName],
+    queryFn: () => api.resourceDetail(editName!),
+    enabled: !!editName,
+  });
+  useEffect(() => {
+    if (!editData) return;
+    setName(editData.name);
+    setRg(editData.resource_group);
+    setHostname(editData.fqdn);
+    setDescription(editData.description);
+    setActive(editData.active);
+    setAliases(editData.fqdn_aliases ?? []);
+    setTags(editData.tags ?? []);
+    setAllowedVOs(editData.allowed_vos ?? []);
+    if (editData.services?.length)
+      setServices(editData.services.map((s) => ({ name: s.name, description: s.description })));
+    if (editData.contacts?.length)
+      setContacts(
+        editData.contacts.map((c) => ({ type: c.contact_type, rank: c.rank, name: c.name, id: c.id })),
+      );
+  }, [editData]);
 
   const { data: rgs } = useQuery({ queryKey: ["resource-groups", false], queryFn: () => api.resourceGroups() });
   const { data: serviceNames } = useQuery({ queryKey: ["service-names"], queryFn: api.serviceNames });
@@ -90,7 +115,8 @@ function NewResourceForm() {
       }
       const res = await api.proposals.create({
         entity_kind: "resource",
-        operation: "create",
+        operation: editName ? "update" : "create",
+        target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: { name, resource_group: rg, resource },
       });
@@ -114,7 +140,7 @@ function NewResourceForm() {
   return (
     <div className="p-8">
       <PageHeader
-        title="Register a resource"
+        title={editName ? `Edit resource: ${editName}` : "Register a resource"}
         description="Provide the resource's placement, host name, services, and contacts. At least one contact is required for a complete registration."
       />
       <div className="max-w-2xl space-y-6">

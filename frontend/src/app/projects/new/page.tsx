@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 
-export default function NewProjectPage() {
+function NewProjectForm() {
   const router = useRouter();
+  const editName = useSearchParams().get("edit");
   const [f, setF] = useState({
     name: "",
     id: "",
@@ -22,6 +24,27 @@ export default function NewProjectPage() {
   });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const { data: editData } = useQuery({
+    queryKey: ["project", editName],
+    queryFn: () => api.project(editName!),
+    enabled: !!editName,
+  });
+  useEffect(() => {
+    if (!editData) return;
+    setF({
+      name: editData.name,
+      id: editData.id,
+      description: editData.description,
+      department: editData.department,
+      field_of_science: editData.field_of_science,
+      field_of_science_id: editData.field_of_science_id,
+      organization: editData.organization,
+      pi_name: editData.pi_name,
+      institution_id: editData.institution_id,
+      sponsor_type: editData.sponsor_type || "CampusGrid",
+      sponsor_name: editData.sponsor_name,
+    });
+  }, [editData]);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF({ ...f, [k]: e.target.value });
 
@@ -38,7 +61,8 @@ export default function NewProjectPage() {
       }
       const res = await api.proposals.create({
         entity_kind: "project",
-        operation: "create",
+        operation: editName ? "update" : "create",
+        target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: proposed,
       });
@@ -52,7 +76,7 @@ export default function NewProjectPage() {
 
   return (
     <div className="p-8">
-      <PageHeader title="New project" />
+      <PageHeader title={editName ? `Edit project: ${editName}` : "New project"} />
       <Card className="max-w-xl">
         <div className="space-y-4">
           <div><label className={label}>Name</label><input className={input} value={f.name} onChange={set("name")} /></div>
@@ -87,5 +111,13 @@ export default function NewProjectPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function NewProjectPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewProjectForm />
+    </Suspense>
   );
 }

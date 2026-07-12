@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
@@ -9,7 +9,8 @@ import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/
 function NewRGForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [name, setName] = useState(params.get("name") ?? "");
+  const editName = params.get("edit");
+  const [name, setName] = useState(params.get("name") ?? editName ?? "");
   const [site, setSite] = useState(params.get("site") ?? "");
   const [production, setProduction] = useState(true);
   const [supportCenter, setSupportCenter] = useState("");
@@ -18,6 +19,19 @@ function NewRGForm() {
   const [busy, setBusy] = useState(false);
 
   const { data: sites } = useQuery({ queryKey: ["sites", false], queryFn: () => api.sites() });
+  const { data: editData } = useQuery({
+    queryKey: ["rg-detail", editName],
+    queryFn: () => api.resourceGroupDetail(editName!),
+    enabled: !!editName,
+  });
+  useEffect(() => {
+    if (!editData) return;
+    setName(editData.name);
+    setSite(editData.site);
+    setProduction(editData.production !== false);
+    setSupportCenter(editData.support_center);
+    setDescription(editData.group_description);
+  }, [editData]);
 
   const submit = async (asDraft: boolean) => {
     setErr("");
@@ -25,7 +39,8 @@ function NewRGForm() {
     try {
       const res = await api.proposals.create({
         entity_kind: "resource_group",
-        operation: "create",
+        operation: editName ? "update" : "create",
+        target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: {
           name,
@@ -52,7 +67,7 @@ function NewRGForm() {
 
   return (
     <div className="p-8">
-      <PageHeader title="New resource group" />
+      <PageHeader title={editName ? `Edit resource group: ${editName}` : "New resource group"} />
       <Card className="max-w-xl">
         <div className="space-y-4">
           <div>

@@ -1,14 +1,53 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Link from "next/link";
-import { api } from "@/lib/api";
-import { PageHeader, LinkButton, input } from "@/components/ui";
+import { api, DashboardResource } from "@/lib/api";
+import { PageHeader, LinkButton, Card, input } from "@/components/ui";
+import { DataTable } from "@/components/DataTable";
+import { useIsReviewer } from "@/components/entityActions";
+
+function ExpandedResource({ name }: { name: string }) {
+  const { data: r } = useQuery({
+    queryKey: ["resource-detail", name],
+    queryFn: () => api.resourceDetail(name),
+  });
+  if (!r) return <p className="text-sm text-gray-400">Loading…</p>;
+  return (
+    <div className="grid gap-4 text-sm sm:grid-cols-2">
+      <div>
+        <div className="text-xs font-semibold uppercase text-gray-500">Contacts</div>
+        {(r.contacts ?? []).length === 0 ? (
+          <p className="text-amber-600">None — required for a complete registration.</p>
+        ) : (
+          <ul className="mt-1 space-y-0.5">
+            {r.contacts.map((c, i) => (
+              <li key={i} className="text-gray-700">
+                {c.contact_type} ({c.rank}): {c.name || c.id || "—"}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <div className="text-xs font-semibold uppercase text-gray-500">Services</div>
+        <p className="mt-1 text-gray-700">
+          {(r.services ?? []).map((s) => s.name).join(", ") || "—"}
+        </p>
+        <div className="mt-2 text-xs font-semibold uppercase text-gray-500">Tags / VOs</div>
+        <p className="mt-1 text-gray-600">
+          {(r.tags ?? []).join(", ") || "no tags"} · VOs: {(r.allowed_vos ?? []).join(", ") || "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function ResourcesPage() {
   const { data, isLoading } = useQuery({ queryKey: ["resources"], queryFn: api.resources });
   const [q, setQ] = useState("");
+  const isReviewer = useIsReviewer();
+  const qc = useQueryClient();
 
   const needle = q.toLowerCase();
   const rows = Object.values(data ?? {})
@@ -23,62 +62,52 @@ export default function ResourcesPage() {
     <div className="p-8">
       <PageHeader
         title="Resources"
-        description="Resources are the individual services and endpoints OSG knows about (a CE, an access point, an XRootD/Pelican origin or cache, a perfSONAR node, …). Each resource belongs to a resource group and declares its FQDN, services, and contacts."
+        description="Resources are the individual services and endpoints OSG knows about (a CE, an access point, an XRootD/Pelican origin or cache, …). Click a row to expand; use the icons to open, edit, or delete."
         action={<LinkButton href="/proposals/new">Register a resource</LinkButton>}
       />
       <input
         className={`${input} mb-4 max-w-md`}
-        placeholder="Search by name or FQDN…"
+        placeholder="Search by name or host name…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
       {isLoading ? (
         <p className="text-gray-400">Loading…</p>
+      ) : rows.length === 0 ? (
+        <Card>
+          <p className="text-sm text-gray-500">No resources match.</p>
+        </Card>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">FQDN</th>
-                <th className="px-4 py-2">Resource group</th>
-                <th className="px-4 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium">
-                    <Link
-                      href={`/resources/detail?name=${encodeURIComponent(r.name)}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {r.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">{r.fqdn}</td>
-                  <td className="px-4 py-2 text-gray-500">{r.resource_group}</td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        r.active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {r.active ? "active" : "inactive"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
-                    No resources match.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<DashboardResource>
+          rows={rows}
+          rowKey={(r) => r.name}
+          canDelete={isReviewer}
+          columns={[
+            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}</span> },
+            { header: "Host name", cell: (r) => <span className="text-gray-600">{r.fqdn}</span> },
+            { header: "Resource group", cell: (r) => <span className="text-gray-500">{r.resource_group}</span> },
+            {
+              header: "Status",
+              cell: (r) => (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    r.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {r.active ? "active" : "inactive"}
+                </span>
+              ),
+            },
+          ]}
+          expanded={(r) => <ExpandedResource name={r.name} />}
+          actions={(r) => ({
+            detailHref: `/resources/detail?name=${encodeURIComponent(r.name)}`,
+            editHref: `/proposals/new?edit=${encodeURIComponent(r.name)}`,
+            entityKind: "resource",
+            name: r.name,
+            onChanged: () => qc.invalidateQueries({ queryKey: ["resources"] }),
+          })}
+        />
       )}
     </div>
   );

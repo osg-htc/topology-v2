@@ -1,18 +1,29 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 
-export default function NewFacilityPage() {
+function NewFacilityForm() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const editName = useSearchParams().get("edit");
+  const [name, setName] = useState(editName ?? "");
   const [institutionID, setInstitutionID] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const { data: institutions } = useQuery({ queryKey: ["institutions"], queryFn: api.institutions });
+  const { data: editData } = useQuery({
+    queryKey: ["facility-detail", editName],
+    queryFn: () => api.facilityDetail(editName!),
+    enabled: !!editName,
+  });
+  useEffect(() => {
+    if (!editData) return;
+    setName(editData.name);
+    setInstitutionID(editData.institution_id);
+  }, [editData]);
 
   const submit = async (asDraft: boolean) => {
     setErr("");
@@ -20,7 +31,8 @@ export default function NewFacilityPage() {
     try {
       const res = await api.proposals.create({
         entity_kind: "facility",
-        operation: "create",
+        operation: editName ? "update" : "create",
+        target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: { name, institution_id: institutionID },
       });
@@ -34,7 +46,7 @@ export default function NewFacilityPage() {
 
   return (
     <div className="p-8">
-      <PageHeader title="New facility" />
+      <PageHeader title={editName ? `Edit facility: ${editName}` : "New facility"} />
       <Card className="max-w-xl">
         <div className="space-y-4">
           <div>
@@ -73,5 +85,13 @@ export default function NewFacilityPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function NewFacilityPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewFacilityForm />
+    </Suspense>
   );
 }

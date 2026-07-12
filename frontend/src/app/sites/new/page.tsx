@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 
-export default function NewSitePage() {
+function NewSiteForm() {
   const router = useRouter();
+  const editName = useSearchParams().get("edit");
   const [f, setF] = useState({
     name: "",
     facility: "",
@@ -27,6 +28,27 @@ export default function NewSitePage() {
     queryKey: ["facilities", false],
     queryFn: () => api.facilities(),
   });
+  const { data: editData } = useQuery({
+    queryKey: ["site-detail", editName],
+    queryFn: () => api.siteDetail(editName!),
+    enabled: !!editName,
+  });
+  useEffect(() => {
+    if (!editData) return;
+    setF({
+      name: editData.name,
+      facility: editData.facility,
+      long_name: editData.long_name,
+      description: editData.description,
+      address_line1: editData.address_line1,
+      city: editData.city,
+      state: editData.state,
+      country: editData.country,
+      zipcode: editData.zipcode,
+      latitude: editData.latitude != null ? String(editData.latitude) : "",
+      longitude: editData.longitude != null ? String(editData.longitude) : "",
+    });
+  }, [editData]);
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF({ ...f, [k]: e.target.value });
@@ -43,7 +65,8 @@ export default function NewSitePage() {
       if (f.longitude) proposed.longitude = Number(f.longitude);
       const res = await api.proposals.create({
         entity_kind: "site",
-        operation: "create",
+        operation: editName ? "update" : "create",
+        target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: proposed,
       });
@@ -57,7 +80,7 @@ export default function NewSitePage() {
 
   return (
     <div className="p-8">
-      <PageHeader title="New site" />
+      <PageHeader title={editName ? `Edit site: ${editName}` : "New site"} />
       <Card className="max-w-xl">
         <div className="space-y-4">
           <div>
@@ -97,5 +120,13 @@ export default function NewSitePage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function NewSitePage() {
+  return (
+    <Suspense fallback={null}>
+      <NewSiteForm />
+    </Suspense>
   );
 }
