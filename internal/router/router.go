@@ -142,6 +142,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 				r.Get("/oidc-config", h.GetOIDCConfig)
 				r.Put("/oidc-config", h.SetOIDCConfig)
 				r.Get("/users", h.ListUsersHandler)
+				r.Get("/users/search", h.SearchUsersHandler)
 				r.Post("/users/{id}/roles", h.SetUserRoleHandler)
 			})
 		})

@@ -113,6 +113,27 @@ func (h *Handler) ListUsersHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, out)
 }
 
+// SearchUsersHandler lets an administrator search all users (for the contact
+// picker). Returns name + legacy contact id (the value used as a contact id).
+func (h *Handler) SearchUsersHandler(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	users, err := h.queries.SearchUsers(r.Context(), q, 25)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]map[string]any, 0, len(users))
+	for _, u := range users {
+		out = append(out, map[string]any{
+			"id":                u.ID,
+			"display_name":      u.DisplayName,
+			"legacy_contact_id": u.LegacyContactID,
+			"is_provisioned":    u.IsProvisioned,
+		})
+	}
+	respondJSON(w, http.StatusOK, out)
+}
+
 type roleChangeRequest struct {
 	Role   string `json:"role"`
 	Action string `json:"action"` // add | remove

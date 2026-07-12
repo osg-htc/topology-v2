@@ -37,6 +37,11 @@ func main() {
 				log.Fatal().Err(err).Msg("import-tree failed")
 			}
 			return
+		case "backfill-contacts":
+			if err := runBackfillContacts(); err != nil {
+				log.Fatal().Err(err).Msg("backfill-contacts failed")
+			}
+			return
 		case "version":
 			log.Info().Str("version", version.Version).Str("commit", version.Commit).Msg("topology")
 			return
@@ -75,6 +80,31 @@ func runImportTree(args []string) error {
 		return err
 	}
 	log.Info().Str("root", args[0]).Msg("topology repo imported")
+	return nil
+}
+
+// runBackfillContacts bootstraps provisioned users from existing contacts and
+// links resource_contacts.user_id (idempotent; for data imported before the
+// contacts-as-users change).
+func runBackfillContacts() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	linked, err := db.New(pool).BackfillContactUsers(ctx)
+	if err != nil {
+		return err
+	}
+	log.Info().Int("linked", linked).Msg("contact users backfilled")
 	return nil
 }
 

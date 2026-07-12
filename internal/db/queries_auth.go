@@ -92,6 +92,77 @@ func (q *Queries) FindUserByLegacyContactID(ctx context.Context, legacyID string
 	return q.GetUser(ctx, id)
 }
 
+// UpsertProvisionedContactUser ensures a (provisioned, identity-less) user
+// exists for a legacy contact id, returning its id. Contacts must be users;
+// this bootstraps an account for an OSG contact without linking any identity.
+// Returns "" if legacyID is empty (cannot dedupe an id-less contact).
+func (q *Queries) UpsertProvisionedContactUser(ctx context.Context, name, legacyID string) (string, error) {
+	if legacyID == "" {
+		return "", nil
+	}
+	var id string
+	err := q.pool.QueryRow(ctx,
+		`INSERT INTO users (display_name, status, is_provisioned, legacy_contact_id)
+		 VALUES ($1, 'active', TRUE, $2)
+		 ON CONFLICT (legacy_contact_id) WHERE legacy_contact_id IS NOT NULL
+		 DO UPDATE SET display_name = CASE WHEN users.display_name = '' THEN EXCLUDED.display_name ELSE users.display_name END
+		 RETURNING id`, name, legacyID).Scan(&id)
+	return id, err
+}
+
+// BackfillContactUsers creates provisioned users for every distinct legacy
+// contact id in resource_contacts and links resource_contacts.user_id. Idempotent.
+func (q *Queries) BackfillContactUsers(ctx context.Context) (int, error) {
+	if _, err := q.pool.Exec(ctx,
+		`INSERT INTO users (display_name, status, is_provisioned, legacy_contact_id)
+		 SELECT DISTINCT ON (contact_id) COALESCE(contact_name,''), 'active', TRUE, contact_id
+		 FROM resource_contacts
+		 WHERE COALESCE(contact_id,'') <> ''
+		   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.legacy_contact_id = resource_contacts.contact_id)
+		 ORDER BY contact_id, contact_name
+		 ON CONFLICT (legacy_contact_id) WHERE legacy_contact_id IS NOT NULL DO NOTHING`); err != nil {
+		return 0, err
+	}
+	tag, err := q.pool.Exec(ctx,
+		`UPDATE resource_contacts rc SET user_id = u.id
+		 FROM users u
+		 WHERE u.legacy_contact_id = rc.contact_id
+		   AND rc.user_id IS NULL AND COALESCE(rc.contact_id,'') <> ''`)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// SearchUsers finds users by display name or legacy contact id (admin picker).
+func (q *Queries) SearchUsers(ctx context.Context, query string, limit int) ([]*models.User, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	rows, err := q.pool.Query(ctx,
+		`SELECT id, display_name, status, legacy_contact_id, is_provisioned,
+		        last_login, created_at, updated_at
+		 FROM users
+		 WHERE display_name ILIKE '%'||$1||'%' OR legacy_contact_id ILIKE '%'||$1||'%'
+		 ORDER BY display_name LIMIT $2`, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*models.User
+	for rows.Next() {
+		u := &models.User{}
+		var legacy *string
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Status, &legacy, &u.IsProvisioned,
+			&u.LastLogin, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		u.LegacyContactID = deref(legacy)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // ListAllUsers returns all user accounts, newest first (admin user management).
 func (q *Queries) ListAllUsers(ctx context.Context) ([]*models.User, error) {
 	rows, err := q.pool.Query(ctx,

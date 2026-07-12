@@ -255,10 +255,14 @@ func (q *Queries) InsertResourceService(ctx context.Context, r ResourceServiceRo
 }
 
 func (q *Queries) InsertResourceContact(ctx context.Context, r ResourceContactRow) error {
+	// Contacts must be users: bootstrap a provisioned (identity-less) user for
+	// this contact and link it.
+	userID, _ := q.UpsertProvisionedContactUser(ctx, r.ContactName, r.ContactID)
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO resource_contacts (resource_id, contact_type, rank, contact_name, contact_id)
-		 VALUES ($1,$2,$3,$4,$5)`,
-		r.ResourceID, r.ContactType, r.Rank, nullString(r.ContactName), nullString(r.ContactID))
+		`INSERT INTO resource_contacts (resource_id, contact_type, rank, contact_name, contact_id, user_id)
+		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		r.ResourceID, r.ContactType, r.Rank, nullString(r.ContactName), nullString(r.ContactID),
+		nullString(userID))
 	return err
 }
 
