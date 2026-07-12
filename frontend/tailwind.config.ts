@@ -7,32 +7,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // OSG-HTC-inspired green primary.
+        // OSG-HTC brand: primary is the bronze/tan #b67b3c (from the site's
+        // Bootstrap $primary), used for buttons, links, and active nav.
         brand: {
-          50: "#e8f5ec",
-          100: "#c7e7d1",
-          200: "#9fd6b2",
-          300: "#6fc08e",
-          400: "#43a96c",
-          500: "#1f9350",
-          600: "#127a41",
-          700: "#0f6335",
-          800: "#0d4e2b",
-          900: "#0b3d23",
-          950: "#052414",
+          50: "#f8f1e9",
+          100: "#eeddc8",
+          200: "#e0c29d",
+          300: "#d0a471",
+          400: "#c48c50",
+          500: "#b67b3c",
+          600: "#9c6733",
+          700: "#7e522a",
+          800: "#603f22",
+          900: "#472f1b",
+          950: "#29190d",
         },
-        // Deep green for the sidebar / dark surfaces (replaces the old navy).
+        // OSG dark navy for the sidebar / dark surfaces (#203050 → #0b1725).
         navy: {
-          700: "#123a26",
-          800: "#0d2c1d",
-          900: "#092015",
-          950: "#04120b",
+          700: "#24406b",
+          800: "#1a3050",
+          900: "#122238",
+          950: "#0b1725",
         },
-        // Gold accent (OSG highlight).
+        // OSG gold (Bootstrap $secondary) accent.
         gold: {
-          400: "#f4b740",
-          500: "#e6a51e",
-          600: "#c98a12",
+          400: "#f6c34f",
+          500: "#f4b627",
+          600: "#d99e15",
+        },
+        // OSG info blue (Bootstrap $info), for occasional accents/links.
+        info: {
+          500: "#2b77f1",
+          600: "#1f61cf",
         },
       },
     },
