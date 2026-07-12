@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 
+	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 )
 
@@ -136,6 +137,37 @@ func (h *Handler) ContactsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	respondJSON(w, http.StatusOK, contacts)
+}
+
+// DowntimesHandler returns downtimes, optionally filtered by ?resource= or ?rg=.
+func (h *Handler) DowntimesHandler(w http.ResponseWriter, r *http.Request) {
+	all, err := h.queries.ListDowntimes(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resFilter := r.URL.Query().Get("resource")
+	rgFilter := r.URL.Query().Get("rg")
+	out := make([]map[string]any, 0)
+	for _, d := range all {
+		if resFilter != "" && d.ResourceName != resFilter {
+			continue
+		}
+		if rgFilter != "" && d.RGName != rgFilter {
+			continue
+		}
+		out = append(out, downtimeJSON(d))
+	}
+	respondJSON(w, http.StatusOK, out)
+}
+
+func downtimeJSON(d db.DowntimeRow) map[string]any {
+	return map[string]any{
+		"id": d.DtID, "resource_group": d.RGName, "resource": d.ResourceName,
+		"class": d.Class, "severity": d.Severity, "description": d.Description,
+		"start_time": d.StartTime, "end_time": d.EndTime, "created_time": d.CreatedTime,
+		"services": strOrEmpty(d.Services),
+	}
 }
 
 // ListInstitutionsHandler returns cached institutions.

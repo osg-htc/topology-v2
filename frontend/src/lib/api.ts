@@ -140,6 +140,13 @@ export const api = {
   facilities: (includeInactive = false) =>
     fetchJSON<Facility[]>(`/facilities${includeInactive ? "?include_inactive=1" : ""}`),
   institutions: () => fetchJSON<Institution[]>("/institutions"),
+  downtimes: (filter?: { resource?: string; rg?: string }) => {
+    const p = new URLSearchParams();
+    if (filter?.resource) p.set("resource", filter.resource);
+    if (filter?.rg) p.set("rg", filter.rg);
+    const qs = p.toString();
+    return fetchJSON<Downtime[]>(`/downtimes${qs ? `?${qs}` : ""}`);
+  },
   projects: (includeInactive = false) =>
     fetchJSON<Project[]>(`/projects${includeInactive ? "?include_inactive=1" : ""}`),
   project: (name: string) => fetchJSON<ProjectDetail>(`/projects/${encodeURIComponent(name)}`),
@@ -259,6 +266,19 @@ export interface Institution {
   ror_id: string;
 }
 
+export interface Downtime {
+  id: number;
+  resource_group: string;
+  resource: string;
+  class: string;
+  severity: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  created_time: string;
+  services: string[];
+}
+
 export interface Project {
   name: string;
   project_id: string;
@@ -311,6 +331,7 @@ export interface ResourceDetail {
   allowed_vos: string[];
   services: ResourceService[];
   contacts: ResourceContact[];
+  downtimes: Downtime[];
   vo_ownership?: unknown;
   wlcg_information?: unknown;
 }

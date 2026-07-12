@@ -76,6 +76,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Get("/projects", h.ListProjectsBrowseHandler)
 		r.Get("/projects/{name}", h.GetProjectHandler)
 		r.Get("/institutions", h.ListInstitutionsHandler)
+		r.Get("/downtimes", h.DowntimesHandler)
 		// Pick-list sources for form dropdowns.
 		r.Get("/service-names", h.ServiceNamesHandler)
 		r.Get("/vo-names", h.VONamesHandler)

@@ -7,12 +7,18 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 import { DetailField } from "@/components/DetailField";
+import { DowntimesTable } from "@/components/DowntimesTable";
 
 function RGDetailView() {
   const name = useSearchParams().get("name") || "";
   const { data: rg, isLoading } = useQuery({
     queryKey: ["rg-detail", name],
     queryFn: () => api.resourceGroupDetail(name),
+    enabled: !!name,
+  });
+  const { data: downtimes } = useQuery({
+    queryKey: ["downtimes", "rg", name],
+    queryFn: () => api.downtimes({ rg: name }),
     enabled: !!name,
   });
   if (isLoading) return <div className="p-8 text-gray-400">Loading…</div>;
@@ -61,6 +67,10 @@ function RGDetailView() {
           </ul>
         </Card>
       </div>
+      <Card className="mt-6">
+        <h3 className="mb-3 text-sm font-semibold text-gray-700">Downtimes</h3>
+        <DowntimesTable downtimes={downtimes ?? []} showResource />
+      </Card>
     </div>
   );
 }

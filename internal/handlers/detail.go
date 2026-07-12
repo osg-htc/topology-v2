@@ -65,6 +65,17 @@ func (h *Handler) ResourceDetailHandler(w http.ResponseWriter, r *http.Request) 
 			out["wlcg_information"] = wl
 		}
 	}
+
+	// Downtimes affecting this resource.
+	dts, _ := h.queries.ListDowntimes(ctx)
+	downtimes := make([]map[string]any, 0)
+	for _, dt := range dts {
+		if dt.ResourceName == name {
+			downtimes = append(downtimes, downtimeJSON(dt))
+		}
+	}
+	out["downtimes"] = downtimes
+
 	respondJSON(w, http.StatusOK, out)
 }
 

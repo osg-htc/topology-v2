@@ -11,6 +11,7 @@ const nav = [
   { href: "/sites", label: "Sites" },
   { href: "/facilities", label: "Facilities" },
   { href: "/projects", label: "Projects" },
+  { href: "/downtimes", label: "Downtimes" },
   { href: "/proposals", label: "My requests" },
 ];
 
