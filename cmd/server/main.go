@@ -19,6 +19,7 @@ import (
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/router"
 	"github.com/bbockelm/topology-v2/internal/storage"
+	"github.com/bbockelm/topology-v2/internal/topology"
 	"github.com/bbockelm/topology-v2/internal/version"
 )
 
@@ -31,6 +32,11 @@ func main() {
 				log.Fatal().Err(err).Msg("migrate failed")
 			}
 			return
+		case "import-tree":
+			if err := runImportTree(os.Args[2:]); err != nil {
+				log.Fatal().Err(err).Msg("import-tree failed")
+			}
+			return
 		case "version":
 			log.Info().Str("version", version.Version).Str("commit", version.Commit).Msg("topology")
 			return
@@ -39,6 +45,36 @@ func main() {
 	if err := run(); err != nil {
 		log.Fatal().Err(err).Msg("server exited with error")
 	}
+}
+
+// runImportTree handles `topology-server import-tree <topology-root>`, loading a
+// topology YAML tree (facilities/sites/RGs + services/support-centers) into the
+// database. Useful for bootstrapping a dev instance and for restore.
+func runImportTree(args []string) error {
+	if len(args) < 1 {
+		return errors.New("usage: import-tree <topology-root>")
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := topology.ImportTree(ctx, db.New(pool), args[0]); err != nil {
+		return err
+	}
+	log.Info().Str("root", args[0]).Msg("topology tree imported")
+	return nil
 }
 
 // runMigrate handles `topology-server migrate [up|status]`.

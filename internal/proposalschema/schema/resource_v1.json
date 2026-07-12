@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topology.opensciencegrid.org/proposal/resource/v1",
+  "title": "Resource change proposal (v1)",
+  "type": "object",
+  "required": ["name", "resource_group", "resource"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "resource_group": { "type": "string", "minLength": 1 },
+    "resource": {
+      "type": "object",
+      "required": ["FQDN"],
+      "properties": {
+        "ID": { "type": ["integer", "null"] },
+        "FQDN": { "type": "string", "minLength": 1 },
+        "Active": { "type": ["boolean", "null"] },
+        "Description": { "type": "string" },
+        "DN": { "type": "string" },
+        "FQDNAliases": { "type": "array", "items": { "type": "string" } },
+        "Tags": { "type": "array", "items": { "type": "string" } },
+        "AllowedVOs": { "type": "array", "items": { "type": "string" } },
+        "Services": { "type": "object" },
+        "ContactLists": { "type": "object" },
+        "VOOwnership": {},
+        "WLCGInformation": {}
+      }
+    }
+  }
+}

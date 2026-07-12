@@ -16,6 +16,7 @@ import (
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/frontend"
 	"github.com/bbockelm/topology-v2/internal/handlers"
+	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/storage"
 )
 
@@ -79,13 +80,36 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		})
 
 		// Invite redemption is public (identity is established via OIDC); the
-		// accept step requires auth.
+		// accept step and invite creation require auth.
 		r.Route("/invites", func(r chi.Router) {
 			r.Get("/{token}", h.GetInvite) // preview an invite
 			r.Group(func(r chi.Router) {
 				r.Use(h.RequireAuth)
+				r.Post("/", h.CreateInvite)
 				r.Post("/{token}/accept", h.AcceptInvite)
 			})
+		})
+
+		// Authenticated app: dashboard + change-proposal workflow.
+		r.Group(func(r chi.Router) {
+			r.Use(h.RequireAuth)
+			r.Get("/dashboard", h.DashboardHandler)
+
+			r.Route("/proposals", func(r chi.Router) {
+				r.Post("/", h.CreateProposal)
+				r.Get("/mine", h.ListMyProposals)
+				r.Get("/pending", h.ListPendingProposals)
+				r.Get("/{id}", h.GetProposal)
+				r.Put("/{id}", h.ReviseProposal)
+				r.Post("/{id}/submit", h.SubmitProposal)
+				r.Post("/{id}/withdraw", h.WithdrawProposal)
+				r.Post("/{id}/approve", h.ApproveProposal)
+				r.Post("/{id}/reject", h.RejectProposal)
+			})
+
+			// Audit log is visible to managers/admins.
+			r.With(h.RequireRole(models.RoleManager, models.RoleAdministrator)).
+				Get("/audit", h.ListAuditHandler)
 		})
 	})
 

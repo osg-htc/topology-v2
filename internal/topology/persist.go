@@ -58,39 +58,8 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 		rgIDs[name] = id
 
 		for resName, res := range rg.Resources {
-			topID, explicit := resolveID(res.ID, resName)
-			resID, err := q.InsertResource(ctx, db.ResourceRow{
-				TopologyID: topID, ResourceGroupID: id, Name: resName,
-				Active: res.Active, Description: res.Description, FQDN: res.FQDN,
-				DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
-				AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
-				WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
-				IDExplicit: explicit,
-			})
-			if err != nil {
-				return fmt.Errorf("insert resource %q: %w", resName, err)
-			}
-			// Services (ordinal preserves a stable ordering; YAML maps are unordered).
-			ord := 0
-			for svcName, svc := range res.Services {
-				if err := q.InsertResourceService(ctx, db.ResourceServiceRow{
-					ResourceID: resID, ServiceName: svcName, Description: svc.Description,
-					Details: mustJSONAny(svcBlob{Details: svc.Details, Extra: svc.Extra}), Ordinal: ord,
-				}); err != nil {
-					return fmt.Errorf("insert service %q: %w", svcName, err)
-				}
-				ord++
-			}
-			// Contact lists.
-			for ctype, ranks := range res.ContactLists {
-				for rank, contact := range ranks {
-					if err := q.InsertResourceContact(ctx, db.ResourceContactRow{
-						ResourceID: resID, ContactType: ctype, Rank: rank,
-						ContactName: contact.Name, ContactID: contact.ID,
-					}); err != nil {
-						return fmt.Errorf("insert contact: %w", err)
-					}
-				}
+			if _, err := UpsertResource(ctx, q, id, resName, res); err != nil {
+				return err
 			}
 		}
 	}
@@ -155,6 +124,47 @@ func ImportTree(ctx context.Context, q *db.Queries, root string) error {
 		return err
 	}
 	return Import(ctx, q, tree)
+}
+
+// UpsertResource inserts a resource (with its services and contact lists) under
+// the given resource-group id. Reused by both the bulk importer and the
+// change-proposal apply path so their behavior stays identical. A nil res.ID
+// falls back to gen_id (id_explicit=false), the correct behavior for a new
+// registration.
+func UpsertResource(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource) (string, error) {
+	topID, explicit := resolveID(res.ID, resName)
+	resID, err := q.InsertResource(ctx, db.ResourceRow{
+		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
+		Active: res.Active, Description: res.Description, FQDN: res.FQDN,
+		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
+		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
+		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
+		IDExplicit: explicit,
+	})
+	if err != nil {
+		return "", fmt.Errorf("insert resource %q: %w", resName, err)
+	}
+	ord := 0
+	for svcName, svc := range res.Services {
+		if err := q.InsertResourceService(ctx, db.ResourceServiceRow{
+			ResourceID: resID, ServiceName: svcName, Description: svc.Description,
+			Details: mustJSONAny(svcBlob{Details: svc.Details, Extra: svc.Extra}), Ordinal: ord,
+		}); err != nil {
+			return "", fmt.Errorf("insert service %q: %w", svcName, err)
+		}
+		ord++
+	}
+	for ctype, ranks := range res.ContactLists {
+		for rank, contact := range ranks {
+			if err := q.InsertResourceContact(ctx, db.ResourceContactRow{
+				ResourceID: resID, ContactType: ctype, Rank: rank,
+				ContactName: contact.Name, ContactID: contact.ID,
+			}); err != nil {
+				return "", fmt.Errorf("insert contact: %w", err)
+			}
+		}
+	}
+	return resID, nil
 }
 
 // Export reads the whole topology domain out of the database into a Topology,

@@ -562,8 +562,31 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := h.currentUser(r)
-	// TODO(phase4): apply the RoleClaim to resource_contacts and write an audit
-	// log entry. For now, consume the invite so the flow is testable end-to-end.
+
+	// Apply a role_claim: assign the offered contact responsibility on the
+	// resource to the accepting user, linked by their account.
+	if inv.Kind == models.InviteRoleClaim && len(inv.ClaimJSON) > 0 {
+		var claim models.RoleClaim
+		if err := json.Unmarshal(inv.ClaimJSON, &claim); err != nil {
+			respondError(w, http.StatusInternalServerError, "invalid claim")
+			return
+		}
+		if claim.EntityKind == models.KindResource || claim.EntityKind == "" {
+			resID, err := h.queries.ResourceIDByName(ctx, claim.EntityID)
+			if err != nil {
+				respondError(w, http.StatusBadRequest, "claim target resource not found")
+				return
+			}
+			cilogon := h.primaryCILogonID(ctx, u.ID)
+			if err := h.queries.AddResourceContact(ctx, resID, claim.ContactType, claim.Rank,
+				u.DisplayName, cilogon, u.ID); err != nil {
+				respondError(w, http.StatusInternalServerError, "assigning responsibility")
+				return
+			}
+			h.audit(ctx, u.ID, "role_claim.accept", claim.EntityKind, claim.EntityID, "", inv.ClaimJSON)
+		}
+	}
+
 	if err := h.queries.MarkInviteUsed(ctx, inv.ID, u.ID); err != nil {
 		respondError(w, http.StatusInternalServerError, "accepting invite")
 		return
