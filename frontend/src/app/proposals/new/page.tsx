@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 import { MultiSelect } from "@/components/MultiSelect";
+import { ContactPersonInput } from "@/components/ContactPersonInput";
 
 const CONTACT_TYPES = [
   "Administrative Contact",
@@ -72,6 +73,8 @@ function NewResourceForm() {
   const { data: voNames } = useQuery({ queryKey: ["vo-names"], queryFn: api.voNames });
   const { data: tagNames } = useQuery({ queryKey: ["tag-names"], queryFn: api.tagNames });
   const { data: knownContacts } = useQuery({ queryKey: ["contacts"], queryFn: api.contacts });
+  const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
+  const isAdmin = session?.effective_role === "administrator";
 
   const rgValid = new Set((rgs ?? []).map((g) => g.name)).has(rg);
   const hasContact = contacts.some((c) => c.name || c.id);
@@ -132,10 +135,6 @@ function NewResourceForm() {
     setContacts(contacts.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   const setService = (i: number, patch: Partial<ServiceRow>) =>
     setServices(services.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  const pickContact = (i: number, nameVal: string) => {
-    const match = (knownContacts ?? []).find((c) => c.name === nameVal);
-    setContact(i, { name: nameVal, ...(match ? { id: match.id } : {}) });
-  };
 
   return (
     <div className="p-8">
@@ -243,22 +242,22 @@ function NewResourceForm() {
                 <select className={input} value={c.rank} onChange={(e) => setContact(i, { rank: e.target.value })}>
                   {RANKS.map((rk) => <option key={rk} value={rk}>{rk}</option>)}
                 </select>
-                <input
-                  className={input}
-                  list="contact-options"
-                  placeholder="Contact"
-                  value={c.name}
-                  onChange={(e) => pickContact(i, e.target.value)}
+                <ContactPersonInput
+                  name={c.name}
+                  id={c.id}
+                  isAdmin={isAdmin}
+                  fallback={knownContacts ?? []}
+                  onChange={(nm, cid) => setContact(i, { name: nm, id: cid })}
                 />
                 <input className={input} placeholder="ID" value={c.id} onChange={(e) => setContact(i, { id: e.target.value })} />
               </div>
             ))}
           </div>
-          <datalist id="contact-options">
-            {(knownContacts ?? []).slice(0, 1000).map((c) => (
-              <option key={`${c.name}-${c.id}`} value={c.name}>{c.id}</option>
-            ))}
-          </datalist>
+          <p className="mt-2 text-xs text-gray-400">
+            {isAdmin
+              ? "Type to search all users; selecting one fills the contact id."
+              : "Pick from known contacts. Need someone new? Ask an administrator or use an invite link."}
+          </p>
         </Card>
 
         <Card>

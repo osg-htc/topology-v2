@@ -190,6 +190,8 @@ export const api = {
         body: JSON.stringify(body),
       }),
     listUsers: () => fetchJSON<AdminUser[]>("/admin/users"),
+    searchUsers: (q: string) =>
+      fetchJSON<UserSearchResult[]>(`/admin/users/search?q=${encodeURIComponent(q)}`),
     setUserRole: (id: string, role: string, action: "add" | "remove") =>
       fetchJSON<{ status: string }>(`/admin/users/${id}/roles`, {
         method: "POST",
@@ -350,6 +352,13 @@ export interface OIDCConfig {
   issuer: string;
   client_id: string;
   has_secret: boolean;
+}
+
+export interface UserSearchResult {
+  id: string;
+  display_name: string;
+  legacy_contact_id: string;
+  is_provisioned: boolean;
 }
 
 export interface AdminUser {
