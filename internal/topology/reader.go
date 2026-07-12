@@ -92,6 +92,38 @@ func ReadTree(root string) (*Topology, error) {
 	return t, nil
 }
 
+// SupportCenterYAML is one entry in support-centers.yaml.
+type SupportCenterYAML struct {
+	ID          int64  `yaml:"ID"`
+	LongName    string `yaml:"LongName,omitempty"`
+	Community   string `yaml:"Community,omitempty"`
+	Description string `yaml:"Description,omitempty"`
+}
+
+// ReadServices loads topology/services.yaml (a name -> int id map).
+func ReadServices(root string) (map[string]int64, error) {
+	out := map[string]int64{}
+	if err := readYAMLFile(filepath.Join(root, "services.yaml"), &out); err != nil {
+		if os.IsNotExist(errCause(err)) {
+			return out, nil
+		}
+		return nil, err
+	}
+	return out, nil
+}
+
+// ReadSupportCenters loads topology/support-centers.yaml.
+func ReadSupportCenters(root string) (map[string]SupportCenterYAML, error) {
+	out := map[string]SupportCenterYAML{}
+	if err := readYAMLFile(filepath.Join(root, "support-centers.yaml"), &out); err != nil {
+		if os.IsNotExist(errCause(err)) {
+			return out, nil
+		}
+		return nil, err
+	}
+	return out, nil
+}
+
 // readYAMLFile unmarshals a YAML file into v. A missing file is reported so the
 // caller can decide whether it is fatal. Parsing is lenient about duplicate
 // mapping keys (last-wins), matching PyYAML — the legacy topology repo contains

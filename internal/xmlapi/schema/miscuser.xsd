@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xsd:schema attributeFormDefault="unqualified" elementFormDefault="qualified" version="1.0" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <xsd:element name="Users">
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element maxOccurs="unbounded" name="User">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="FullName" type="xsd:string" />
+              <xsd:element name="ID" type="xsd:string" />
+              <xsd:element name="PhotoURL" type="xsd:string" />
+              <xsd:element name="GravatarURL" type="xsd:string" />
+              <xsd:element name="Profile" type="xsd:string" />
+              <xsd:element name="GitHub" type="xsd:string" minOccurs="0"/>
+              <xsd:element name="CILogonID" type="xsd:string" minOccurs="0"/>
+              <xsd:element name="Flags" minOccurs="0">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element minOccurs="0" maxOccurs="unbounded" name="Flag" type="xsd:string" />
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="ContactInformation" minOccurs="0">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="PrimaryEmail" type="xsd:string" />
+                    <xsd:element name="SecondaryEmail" type="xsd:string" />
+                    <xsd:element name="PrimaryPhone" type="xsd:string" />
+                    <xsd:element name="SecondaryPhone" type="xsd:string" />
+                    <xsd:element name="IM" type="xsd:string" />
+                    <xsd:element name="DN" type="xsd:string" />
+                    <xsd:element name="ContactPreference" type="xsd:string" />
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+</xsd:schema>

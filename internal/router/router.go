@@ -43,9 +43,23 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 	// Health check (unauthenticated).
 	r.Get("/healthz", h.Healthz)
 
+	// Legacy-compatible topology web API (public, mirrors the existing paths).
+	r.Get("/rgsummary/xml", h.RGSummaryXML)
+	r.Get("/rgdowntime/xml", h.RGDowntimeXML)
+	r.Get("/miscresource/json", h.MiscResourceJSON)
+	r.Get("/miscsite/json", h.MiscSiteJSON)
+	r.Get("/miscfacility/json", h.MiscFacilityJSON)
+	r.Get("/schema/{file}", h.ServeSchema)
+
 	// Versioned API tree. Handlers are added per phase.
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", h.Healthz)
+
+		// JSON forms of the topology read API for the frontend.
+		r.Get("/rgsummary", h.RGSummaryJSON)
+		r.Get("/resources", h.MiscResourceJSON)
+		r.Get("/sites", h.MiscSiteJSON)
+		r.Get("/facilities", h.MiscFacilityJSON)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {

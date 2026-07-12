@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bbockelm/topology-v2/internal/db"
+	"github.com/bbockelm/topology-v2/internal/testsupport"
 )
 
 // TestDBRoundTrip proves the full backup/restore round-trip through Postgres:
@@ -22,21 +22,7 @@ func TestDBRoundTrip(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := db.RunMigrations(dbURL); err != nil {
-		t.Fatalf("migrations: %v", err)
-	}
-	pool, err := db.Connect(ctx, dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	defer pool.Close()
-	q := db.New(pool)
-
-	// Start from a clean topology domain.
-	if _, err := pool.Exec(ctx, `TRUNCATE downtimes, resource_contacts, resource_services,
-		resources, resource_groups, sites, facilities RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
+	_, q := testsupport.SetupSchema(t, dbURL)
 
 	// Optionally round-trip a real topology tree (e.g. a clone of the OSG repo)
 	// to catch modeling gaps in production data.

@@ -111,6 +111,52 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 	return nil
 }
 
+// ImportServices loads the services.yaml name->id map into the services table.
+func ImportServices(ctx context.Context, q *db.Queries, services map[string]int64) error {
+	for name, id := range services {
+		if id == 0 {
+			id = GenID(name)
+		}
+		if err := q.UpsertService(ctx, id, name); err != nil {
+			return fmt.Errorf("upsert service %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// ImportSupportCenters loads support-centers.yaml into the support_centers table.
+func ImportSupportCenters(ctx context.Context, q *db.Queries, scs map[string]SupportCenterYAML) error {
+	for name, sc := range scs {
+		id := sc.ID
+		if id == 0 {
+			id = GenID(name)
+		}
+		if err := q.UpsertSupportCenter(ctx, id, name, sc.LongName, sc.Community, sc.Description); err != nil {
+			return fmt.Errorf("upsert support center %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// ImportTree reads a full topology root (tree + flat files) and imports it.
+func ImportTree(ctx context.Context, q *db.Queries, root string) error {
+	if svcs, err := ReadServices(root); err == nil {
+		if err := ImportServices(ctx, q, svcs); err != nil {
+			return err
+		}
+	}
+	if scs, err := ReadSupportCenters(root); err == nil {
+		if err := ImportSupportCenters(ctx, q, scs); err != nil {
+			return err
+		}
+	}
+	tree, err := ReadTree(root)
+	if err != nil {
+		return err
+	}
+	return Import(ctx, q, tree)
+}
+
 // Export reads the whole topology domain out of the database into a Topology,
 // reconstructing the directory parentage.
 func Export(ctx context.Context, q *db.Queries) (*Topology, error) {

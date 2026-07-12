@@ -102,6 +102,44 @@ type DowntimeRow struct {
 	Ordinal      int
 }
 
+// ---- services & support centers ----
+
+// UpsertService inserts or updates a service id by name.
+func (q *Queries) UpsertService(ctx context.Context, id int64, name string) error {
+	_, err := q.pool.Exec(ctx,
+		`INSERT INTO services (id, name) VALUES ($1,$2)
+		 ON CONFLICT (name) DO UPDATE SET id = $1`, id, name)
+	return err
+}
+
+// UpsertSupportCenter inserts or updates a support center by name.
+func (q *Queries) UpsertSupportCenter(ctx context.Context, id int64, name, longName, community, description string) error {
+	_, err := q.pool.Exec(ctx,
+		`INSERT INTO support_centers (id, name, long_name, community, description)
+		 VALUES ($1,$2,$3,$4,$5)
+		 ON CONFLICT (name) DO UPDATE SET id=$1, long_name=$3, community=$4, description=$5`,
+		id, name, nullString(longName), nullString(community), nullString(description))
+	return err
+}
+
+// ServiceIDByName returns the id for a service name, or (0,false) if unknown.
+func (q *Queries) ServiceIDByName(ctx context.Context, name string) (int64, bool) {
+	var id int64
+	if err := q.pool.QueryRow(ctx, `SELECT id FROM services WHERE name = $1`, name).Scan(&id); err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
+// SupportCenterIDByName returns the id for a support center name.
+func (q *Queries) SupportCenterIDByName(ctx context.Context, name string) (int64, bool) {
+	var id int64
+	if err := q.pool.QueryRow(ctx, `SELECT id FROM support_centers WHERE name = $1`, name).Scan(&id); err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
 // ---- inserts ----
 
 func (q *Queries) InsertFacility(ctx context.Context, r FacilityRow) (string, error) {
