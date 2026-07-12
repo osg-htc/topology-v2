@@ -227,6 +227,21 @@ func (q *Queries) ListUserIdentities(ctx context.Context, userID string) ([]*ide
 	return out, rows.Err()
 }
 
+// EncryptedEmailByContactID resolves a legacy contact id (OSG/CILogon id or
+// SHA1-of-email) to the encrypted email of a matching identity, if any. Used to
+// expose contact emails to authorized API clients.
+func (q *Queries) EncryptedEmailByContactID(ctx context.Context, contactID string) (ciphertext, wrapped []byte, ok bool) {
+	err := q.pool.QueryRow(ctx,
+		`SELECT email_ciphertext, email_dek_wrapped
+		 FROM user_identities
+		 WHERE (email_sha1 = $1 OR cilogon_id = $1) AND email_ciphertext IS NOT NULL
+		 LIMIT 1`, contactID).Scan(&ciphertext, &wrapped)
+	if err != nil {
+		return nil, nil, false
+	}
+	return ciphertext, wrapped, true
+}
+
 // DeleteIdentity unlinks a federated identity from an account.
 func (q *Queries) DeleteIdentity(ctx context.Context, id string) error {
 	_, err := q.pool.Exec(ctx, `DELETE FROM user_identities WHERE id = $1`, id)

@@ -50,6 +50,8 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 	r.Get("/miscresource/json", h.MiscResourceJSON)
 	r.Get("/miscsite/json", h.MiscSiteJSON)
 	r.Get("/miscfacility/json", h.MiscFacilityJSON)
+	r.Get("/vosummary/json", h.VOSummaryJSON)
+	r.Get("/miscproject/json", h.MiscProjectJSON)
 	r.Get("/schema/{file}", h.ServeSchema)
 
 	// Versioned API tree. Handlers are added per phase.

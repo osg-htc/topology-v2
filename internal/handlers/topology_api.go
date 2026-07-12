@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"gopkg.in/yaml.v3"
 
 	"github.com/bbockelm/topology-v2/internal/xmlapi"
 )
@@ -85,7 +86,7 @@ func (h *Handler) includePII(r *http.Request) bool {
 
 // RGSummaryXML serves /rgsummary/xml.
 func (h *Handler) RGSummaryXML(w http.ResponseWriter, r *http.Request) {
-	summary, err := xmlapi.BuildResourceSummary(r.Context(), h.queries, parseFilters(r), h.includePII(r))
+	summary, err := xmlapi.BuildResourceSummary(r.Context(), h.queries, h.encryptor, parseFilters(r), h.includePII(r))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -95,7 +96,7 @@ func (h *Handler) RGSummaryXML(w http.ResponseWriter, r *http.Request) {
 
 // RGSummaryJSON serves /api/v1/rgsummary (JSON form of the same data).
 func (h *Handler) RGSummaryJSON(w http.ResponseWriter, r *http.Request) {
-	summary, err := xmlapi.BuildResourceSummary(r.Context(), h.queries, parseFilters(r), h.includePII(r))
+	summary, err := xmlapi.BuildResourceSummary(r.Context(), h.queries, h.encryptor, parseFilters(r), h.includePII(r))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -159,6 +160,58 @@ func (h *Handler) MiscFacilityJSON(w http.ResponseWriter, r *http.Request) {
 		out[fac.Name] = map[string]any{
 			"ID": fac.TopologyID, "Name": fac.Name, "InstitutionID": fac.InstitutionID,
 		}
+	}
+	respondJSON(w, http.StatusOK, out)
+}
+
+// VOSummaryJSON serves virtual organizations keyed by name (parsed from the
+// stored document form).
+func (h *Handler) VOSummaryJSON(w http.ResponseWriter, r *http.Request) {
+	vos, err := h.queries.ListVOs(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := map[string]any{}
+	for _, v := range vos {
+		var doc map[string]any
+		if err := yaml.Unmarshal(v.Raw, &doc); err == nil {
+			out[v.Name] = doc
+		}
+	}
+	respondJSON(w, http.StatusOK, out)
+}
+
+// MiscProjectJSON serves projects keyed by name, reconstructed from the
+// relational columns (typed fields + sponsor + any extra).
+func (h *Handler) MiscProjectJSON(w http.ResponseWriter, r *http.Request) {
+	projects, err := h.queries.ListProjects(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := map[string]any{}
+	for _, p := range projects {
+		m := map[string]any{
+			"Name": p.Name, "ID": p.ProjectID, "Description": p.Description,
+			"Department": p.Department, "FieldOfScience": p.FieldOfScience,
+			"FieldOfScienceID": p.FieldOfScienceID, "Organization": p.Organization,
+			"PIName": p.PIName, "InstitutionID": p.InstitutionID,
+		}
+		if len(p.Sponsor) > 0 {
+			var s any
+			_ = yaml.Unmarshal(p.Sponsor, &s)
+			m["Sponsor"] = s
+		}
+		if len(p.Extra) > 0 {
+			var e map[string]any
+			if yaml.Unmarshal(p.Extra, &e) == nil {
+				for k, v := range e {
+					m[k] = v
+				}
+			}
+		}
+		out[p.Name] = m
 	}
 	respondJSON(w, http.StatusOK, out)
 }

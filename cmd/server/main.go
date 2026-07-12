@@ -70,10 +70,11 @@ func runImportTree(args []string) error {
 		return err
 	}
 	defer pool.Close()
-	if err := topology.ImportTree(ctx, db.New(pool), args[0]); err != nil {
+	// Import the whole repo (tree + VOs + projects) when siblings are present.
+	if err := topology.ImportRepo(ctx, db.New(pool), args[0]); err != nil {
 		return err
 	}
-	log.Info().Str("root", args[0]).Msg("topology tree imported")
+	log.Info().Str("root", args[0]).Msg("topology repo imported")
 	return nil
 }
 

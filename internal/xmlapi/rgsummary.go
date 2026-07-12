@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bbockelm/topology-v2/internal/crypto"
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/topology"
 )
@@ -102,7 +103,7 @@ type ResourceXML struct {
 	FQDN         string          `xml:"FQDN"`
 	FQDNAliases  FQDNAliasesXML  `xml:"FQDNAliases"`
 	VOOwnership  VOOwnershipXML  `xml:"VOOwnership"`
-	WLCG         WLCGEmpty       `xml:"WLCGInformation"`
+	WLCG         WLCGXML         `xml:"WLCGInformation"`
 	ContactLists ContactListsXML `xml:"ContactLists"`
 	IsCCStar     bool            `xml:"IsCCStar"`
 }
@@ -131,9 +132,27 @@ type OwnershipXML struct {
 	VO      string `xml:"VO"`
 }
 
-// WLCGEmpty renders an empty <WLCGInformation/> element (the XSD's inner
-// sequence is optional). Populating full WLCG fields is a later refinement.
-type WLCGEmpty struct{}
+// WLCGXML renders <WLCGInformation>. The inner sequence is optional in the XSD,
+// so when a resource has no WLCG data all fields are nil and an empty element is
+// emitted. When data is present, every XSD-required field is populated (with
+// defaults for any missing) so the sequence validates; the two optional fields
+// (APELNormalFactor, HEPScore23Percentage) are emitted only when present.
+// Field order matches rgsummary.xsd.
+type WLCGXML struct {
+	InteropBDII          *bool    `xml:"InteropBDII,omitempty"`
+	LDAPURL              *string  `xml:"LDAPURL,omitempty"`
+	InteropMonitoring    *bool    `xml:"InteropMonitoring,omitempty"`
+	InteropAccounting    *bool    `xml:"InteropAccounting,omitempty"`
+	AccountingName       *string  `xml:"AccountingName,omitempty"`
+	KSI2KMin             *float64 `xml:"KSI2KMin,omitempty"`
+	KSI2KMax             *float64 `xml:"KSI2KMax,omitempty"`
+	StorageCapacityMin   *string  `xml:"StorageCapacityMin,omitempty"`
+	StorageCapacityMax   *string  `xml:"StorageCapacityMax,omitempty"`
+	HEPSPEC              *string  `xml:"HEPSPEC,omitempty"`
+	APELNormalFactor     *string  `xml:"APELNormalFactor,omitempty"`
+	HEPScore23Percentage *float64 `xml:"HEPScore23Percentage,omitempty"`
+	TapeCapacity         *string  `xml:"TapeCapacity,omitempty"`
+}
 
 type ContactListsXML struct {
 	ContactLists []ContactListXML `xml:"ContactList"`
@@ -154,7 +173,7 @@ type ContactXML struct {
 
 // BuildResourceSummary assembles the ResourceSummary from the database.
 // includePII controls whether contact emails are exposed (auth-gated).
-func BuildResourceSummary(ctx context.Context, q *db.Queries, f Filters, includePII bool) (*ResourceSummary, error) {
+func BuildResourceSummary(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, f Filters, includePII bool) (*ResourceSummary, error) {
 	facs, err := q.ListFacilities(ctx)
 	if err != nil {
 		return nil, err
@@ -222,7 +241,7 @@ func BuildResourceSummary(ctx context.Context, q *db.Queries, f Filters, include
 			continue
 		}
 
-		resXMLs, ccstar, matchedService := buildResources(ctx, q, resByRG[rg.Name], f, includePII)
+		resXMLs, ccstar, matchedService := buildResources(ctx, q, enc, resByRG[rg.Name], f, includePII)
 		// A service filter is set but no resource in this group offers it.
 		if !idAny(f.ServiceIDs) && !matchedService {
 			continue
@@ -274,7 +293,7 @@ func siteXML(s db.SiteRow, ccstar bool) SiteXML {
 
 // buildResources renders a resource group's resources, returning whether any
 // resource carries the CC* tag (bubbles up) and whether a service filter matched.
-func buildResources(ctx context.Context, q *db.Queries, rows []db.ResourceRow, f Filters, includePII bool) ([]ResourceXML, bool, bool) {
+func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, rows []db.ResourceRow, f Filters, includePII bool) ([]ResourceXML, bool, bool) {
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	var out []ResourceXML
 	ccstar := false
@@ -312,7 +331,8 @@ func buildResources(ctx context.Context, q *db.Queries, rows []db.ResourceRow, f
 			Tags:        TagsXML{Tags: r.Tags},
 			FQDNAliases: FQDNAliasesXML{Aliases: r.FQDNAliases},
 			VOOwnership: voOwnershipXML(r.VOOwnership),
-			ContactLists: buildContactLists(ctx, q, r.ID, includePII),
+			WLCG:        wlcgXML(r.WLCGInformation),
+			ContactLists: buildContactLists(ctx, q, enc, r.ID, includePII),
 			IsCCStar:    isCC,
 		}
 		if len(svcXMLs) > 0 {
@@ -342,7 +362,7 @@ func voOwnershipXML(v []byte) VOOwnershipXML {
 	return x
 }
 
-func buildContactLists(ctx context.Context, q *db.Queries, resourceID string, includePII bool) ContactListsXML {
+func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, resourceID string, includePII bool) ContactListsXML {
 	contacts, _ := q.ListResourceContacts(ctx, resourceID)
 	byType := map[string][]ContactXML{}
 	order := []string{}
@@ -354,9 +374,15 @@ func buildContactLists(ctx context.Context, q *db.Queries, resourceID string, in
 		if strings.HasPrefix(c.ContactID, "OSG") {
 			cx.CILogonID = c.ContactID
 		}
-		// Email exposure is auth-gated; population lands with contact<->user
-		// linking. includePII reserved for that path.
-		_ = includePII
+		// Email is auth-gated: only for authorized (authenticated) requests, and
+		// only when the contact resolves to an account with a decryptable email.
+		if includePII && enc != nil && c.ContactID != "" {
+			if ct, wrapped, ok := q.EncryptedEmailByContactID(ctx, c.ContactID); ok {
+				if email, err := enc.DecryptPII(&crypto.EncryptedField{Ciphertext: ct, WrappedDEK: wrapped}); err == nil {
+					cx.Email = email
+				}
+			}
+		}
 		byType[c.ContactType] = append(byType[c.ContactType], cx)
 	}
 	out := ContactListsXML{}
@@ -366,4 +392,40 @@ func buildContactLists(ctx context.Context, q *db.Queries, resourceID string, in
 		})
 	}
 	return out
+}
+
+// wlcgXML builds the WLCGInformation element from the stored map. An empty map
+// yields an empty element; otherwise every XSD-required field is populated.
+func wlcgXML(v []byte) WLCGXML {
+	m := parseJSONMap(v)
+	if len(m) == 0 {
+		return WLCGXML{}
+	}
+	b := func(key string) *bool { v := getBool(m, key); return &v }
+	s := func(key string) *string { v := getStr(m, key); return &v }
+	f := func(key string) *float64 { v := getFloat(m, key); return &v }
+
+	x := WLCGXML{
+		InteropBDII:        b("InteropBDII"),
+		LDAPURL:            s("LDAPURL"),
+		InteropMonitoring:  b("InteropMonitoring"),
+		InteropAccounting:  b("InteropAccounting"),
+		AccountingName:     s("AccountingName"),
+		KSI2KMin:           f("KSI2KMin"),
+		KSI2KMax:           f("KSI2KMax"),
+		StorageCapacityMin: s("StorageCapacityMin"),
+		StorageCapacityMax: s("StorageCapacityMax"),
+		HEPSPEC:            s("HEPSPEC"),
+		TapeCapacity:       s("TapeCapacity"),
+	}
+	// Optional fields: only when present in the source.
+	if _, ok := m["APELNormalFactor"]; ok {
+		v := getStr(m, "APELNormalFactor")
+		x.APELNormalFactor = &v
+	}
+	if _, ok := m["HEPScore23Percentage"]; ok {
+		v := getFloat(m, "HEPScore23Percentage")
+		x.HEPScore23Percentage = &v
+	}
+	return x
 }

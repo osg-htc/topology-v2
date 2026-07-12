@@ -1,0 +1,86 @@
+# One-command local stack: Postgres + MinIO + the topology webapp (built from
+# the Dockerfile with the frontend embedded). Everything the app needs.
+#
+#   docker compose up --build
+#   open http://localhost:8080   (dev mode: use the "Dev login" box)
+#
+# Data persists in named volumes across restarts; the fixed dev INSTANCE_KEY
+# below keeps encrypted columns readable between runs. Do NOT use these
+# credentials or key outside local development.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: topology
+      POSTGRES_PASSWORD: topology
+      POSTGRES_DB: topology
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U topology"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # MinIO console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Creates the backups bucket once MinIO is up.
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+      mc mb --ignore-existing local/topology-backups;
+      echo 'bucket ready';
+      "
+
+  app:
+    build:
+      context: .
+      args:
+        VERSION: dev-compose
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      TOPOLOGY_APP_ENV: development
+      TOPOLOGY_DATABASE_URL: postgres://topology:topology@postgres:5432/topology?sslmode=disable
+      TOPOLOGY_S3_ENDPOINT: http://minio:9000
+      TOPOLOGY_S3_BUCKET: topology-backups
+      TOPOLOGY_S3_ACCESS_KEY: minioadmin
+      TOPOLOGY_S3_SECRET_KEY: minioadmin
+      TOPOLOGY_S3_USE_PATH_STYLE: "true"
+      TOPOLOGY_BASE_URL: http://localhost:8080
+      # Fixed 32-byte (64 hex) key so encrypted data survives restarts. DEV ONLY.
+      TOPOLOGY_INSTANCE_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      # Optional: which GitHub repo the admin "Import from GitHub" pulls.
+      TOPOLOGY_GITHUB_REPO: opensciencegrid/topology
+
+volumes:
+  pgdata:
+  miniodata:

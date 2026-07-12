@@ -31,7 +31,7 @@ func (h *Handler) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(dir)
 
-	if err := topology.ExportFullToDir(ctx, h.queries, dir); err != nil {
+	if err := topology.ExportRepoToDir(ctx, h.queries, dir); err != nil {
 		respondError(w, http.StatusInternalServerError, "export: "+err.Error())
 		return
 	}
@@ -141,12 +141,13 @@ func (h *Handler) ImportFromGitHub(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "extract: "+err.Error())
 		return
 	}
-	root, err := backup.FindTopologyRoot(dir)
+	topoRoot, err := backup.FindTopologyRoot(dir)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := h.restoreFromDir(ctx, root); err != nil {
+	// Import the whole repo (tree + VOs + projects); repoRoot is topoRoot's parent.
+	if err := h.restoreFromDir(ctx, topoRoot); err != nil {
 		respondError(w, http.StatusInternalServerError, "import: "+err.Error())
 		return
 	}
@@ -155,10 +156,10 @@ func (h *Handler) ImportFromGitHub(w http.ResponseWriter, r *http.Request) {
 }
 
 // restoreFromDir replaces the topology domain with the contents of a topology
-// root directory (truncate + import).
-func (h *Handler) restoreFromDir(ctx context.Context, dir string) error {
+// tree directory and its sibling VO/project dirs (truncate + import).
+func (h *Handler) restoreFromDir(ctx context.Context, topoDir string) error {
 	if err := h.queries.TruncateTopology(ctx); err != nil {
 		return err
 	}
-	return topology.ImportTree(ctx, h.queries, dir)
+	return topology.ImportRepo(ctx, h.queries, topoDir)
 }

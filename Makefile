@@ -36,5 +36,17 @@ test: ## Run Go tests
 docker: ## Build the production Docker image
 	docker build -t topology-webapp:$(VERSION) .
 
+up: ## Launch the full stack (Postgres + MinIO + app) via docker compose
+	docker compose up --build
+
+up-detached: ## Launch the full stack in the background
+	docker compose up --build -d
+
+down: ## Stop the stack (keeps data volumes)
+	docker compose down
+
+down-clean: ## Stop the stack and delete data volumes
+	docker compose down -v
+
 clean: ## Remove build artifacts
 	rm -rf bin internal/frontend/dist frontend/out

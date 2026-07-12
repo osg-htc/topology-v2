@@ -134,15 +134,21 @@ func readYAMLFile(path string, v interface{}) error {
 	if err != nil {
 		return &fileError{path: path, err: err}
 	}
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	if err := decodeYAMLLenient(data, v); err != nil {
 		return fmt.Errorf("parsing %s: %w", path, err)
 	}
-	dedupeMappingKeys(&root)
-	if err := root.Decode(v); err != nil {
-		return fmt.Errorf("decoding %s: %w", path, err)
-	}
 	return nil
+}
+
+// decodeYAMLLenient unmarshals YAML into v, tolerating duplicate mapping keys
+// (last-wins, like PyYAML) which yaml.v3 otherwise rejects.
+func decodeYAMLLenient(data []byte, v interface{}) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	dedupeMappingKeys(&root)
+	return root.Decode(v)
 }
 
 // dedupeMappingKeys walks a YAML node tree and, for every mapping, keeps only

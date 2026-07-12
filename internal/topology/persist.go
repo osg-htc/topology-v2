@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/bbockelm/topology-v2/internal/db"
@@ -106,6 +107,48 @@ func ImportSupportCenters(ctx context.Context, q *db.Queries, scs map[string]Sup
 		}
 	}
 	return nil
+}
+
+// ImportRepo imports an entire topology repository: the topology/ tree, plus
+// the sibling virtual-organizations/ and projects/ directories. repoRoot may be
+// the repo root (containing topology/) or the topology/ dir itself.
+func ImportRepo(ctx context.Context, q *db.Queries, repoRoot string) error {
+	treeDir, voDir, projDir := repoLayout(repoRoot)
+	if err := ImportTree(ctx, q, treeDir); err != nil {
+		return err
+	}
+	if err := ImportVOs(ctx, q, voDir); err != nil {
+		return err
+	}
+	return ImportProjects(ctx, q, projDir)
+}
+
+// ExportRepoToDir writes the full repository layout (topology/ + flat files,
+// virtual-organizations/, projects/) under repoRoot, for a complete backup.
+func ExportRepoToDir(ctx context.Context, q *db.Queries, repoRoot string) error {
+	treeDir := filepath.Join(repoRoot, "topology")
+	if err := ExportFullToDir(ctx, q, treeDir); err != nil {
+		return err
+	}
+	if err := ExportVOsToDir(ctx, q, filepath.Join(repoRoot, "virtual-organizations")); err != nil {
+		return err
+	}
+	return ExportProjectsToDir(ctx, q, filepath.Join(repoRoot, "projects"))
+}
+
+// repoLayout resolves the topology/vo/project directories from a root that may
+// be either the repo root or the topology/ tree directory.
+func repoLayout(repoRoot string) (treeDir, voDir, projDir string) {
+	if fi, err := os.Stat(filepath.Join(repoRoot, "topology")); err == nil && fi.IsDir() {
+		return filepath.Join(repoRoot, "topology"),
+			filepath.Join(repoRoot, "virtual-organizations"),
+			filepath.Join(repoRoot, "projects")
+	}
+	// repoRoot is itself the topology tree; VO/project siblings live one level up.
+	parent := filepath.Dir(repoRoot)
+	return repoRoot,
+		filepath.Join(parent, "virtual-organizations"),
+		filepath.Join(parent, "projects")
 }
 
 // ImportTree reads a full topology root (tree + flat files) and imports it.

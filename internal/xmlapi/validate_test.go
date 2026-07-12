@@ -38,7 +38,7 @@ func TestXMLValidatesAgainstXSD(t *testing.T) {
 		t.Fatalf("ImportTree: %v", err)
 	}
 
-	summary, err := xmlapi.BuildResourceSummary(ctx, q, xmlapi.Filters{}, false)
+	summary, err := xmlapi.BuildResourceSummary(ctx, q, nil, xmlapi.Filters{}, false)
 	if err != nil {
 		t.Fatalf("BuildResourceSummary: %v", err)
 	}
