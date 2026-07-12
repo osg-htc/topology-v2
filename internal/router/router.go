@@ -60,9 +60,9 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", h.Healthz)
 
-		// JSON forms of the topology read API for the frontend.
+		// JSON forms of the topology read API for the frontend (snake_case).
 		r.Get("/rgsummary", h.RGSummaryJSON)
-		r.Get("/resources", h.MiscResourceJSON)
+		r.Get("/resources", h.ResourcesJSON)
 		r.Get("/sites", h.MiscSiteJSON)
 		r.Get("/facilities", h.MiscFacilityJSON)
 

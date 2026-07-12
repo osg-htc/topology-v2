@@ -9,13 +9,14 @@ export default function ResourcesPage() {
   const { data, isLoading } = useQuery({ queryKey: ["resources"], queryFn: api.resources });
   const [q, setQ] = useState("");
 
+  const needle = q.toLowerCase();
   const rows = Object.values(data ?? {})
     .filter(
       (r) =>
-        r.name.toLowerCase().includes(q.toLowerCase()) ||
-        r.fqdn.toLowerCase().includes(q.toLowerCase()),
+        (r.name ?? "").toLowerCase().includes(needle) ||
+        (r.fqdn ?? "").toLowerCase().includes(needle),
     )
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
 
   return (
     <div className="p-8">

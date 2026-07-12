@@ -114,7 +114,8 @@ func (h *Handler) RGDowntimeXML(w http.ResponseWriter, r *http.Request) {
 	writeXML(w, dts)
 }
 
-// MiscResourceJSON serves a resource-keyed JSON summary.
+// MiscResourceJSON serves a resource-keyed JSON summary in the legacy
+// (capitalized-key) shape for /miscresource/json compatibility.
 func (h *Handler) MiscResourceJSON(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.ListResources(r.Context())
 	if err != nil {
@@ -126,6 +127,25 @@ func (h *Handler) MiscResourceJSON(w http.ResponseWriter, r *http.Request) {
 		out[res.Name] = map[string]any{
 			"ID": res.TopologyID, "Name": res.Name, "FQDN": res.FQDN,
 			"Active": res.Active, "ResourceGroup": res.RGName,
+		}
+	}
+	respondJSON(w, http.StatusOK, out)
+}
+
+// ResourcesJSON serves the resource list in the frontend's snake_case shape
+// (matching /dashboard's my_resources), keyed by resource name.
+func (h *Handler) ResourcesJSON(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queries.ListResources(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := map[string]any{}
+	for _, res := range rows {
+		active := res.Active != nil && *res.Active
+		out[res.Name] = map[string]any{
+			"id": res.TopologyID, "name": res.Name, "fqdn": res.FQDN,
+			"active": active, "resource_group": res.RGName,
 		}
 	}
 	respondJSON(w, http.StatusOK, out)
