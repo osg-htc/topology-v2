@@ -627,7 +627,7 @@ func (h *Handler) redirectLogin(w http.ResponseWriter, r *http.Request, errCode 
 func (h *Handler) finishRedirect(w http.ResponseWriter, r *http.Request, returnTo, invite string) {
 	dest := "/"
 	if invite != "" {
-		dest = "/invites/" + url.PathEscape(invite)
+		dest = "/invites/accept?token=" + url.QueryEscape(invite)
 	} else if returnTo != "" && strings.HasPrefix(returnTo, "/") {
 		dest = returnTo
 	}

@@ -65,7 +65,7 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit(ctx, u.ID, "invite.create", req.Kind, req.TargetUserID, "", claimJSON)
 	respondJSON(w, http.StatusCreated, map[string]string{
-		"invite_url": h.cfg.BaseURL + "/invites/" + token,
+		"invite_url": h.cfg.BaseURL + "/invites/accept?token=" + token,
 		"token":      token,
 	})
 }
