@@ -91,6 +91,26 @@ func (s *Store) Download(ctx context.Context, key string) ([]byte, error) {
 	return io.ReadAll(out.Body)
 }
 
+// ListKeys returns object keys under a prefix.
+func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	p := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
+		Bucket: &s.bucket, Prefix: &prefix,
+	})
+	for p.HasMorePages() {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, obj := range page.Contents {
+			if obj.Key != nil {
+				keys = append(keys, *obj.Key)
+			}
+		}
+	}
+	return keys, nil
+}
+
 func nonEmpty(s string) *string {
 	if s == "" {
 		return nil

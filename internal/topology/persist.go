@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/bbockelm/topology-v2/internal/db"
 )
@@ -165,6 +166,45 @@ func UpsertResource(ctx context.Context, q *db.Queries, rgID, resName string, re
 		}
 	}
 	return resID, nil
+}
+
+// ExportFullToDir writes the entire topology domain (tree + services.yaml +
+// support-centers.yaml) to a directory, the on-disk form used for backups.
+func ExportFullToDir(ctx context.Context, q *db.Queries, root string) error {
+	tree, err := Export(ctx, q)
+	if err != nil {
+		return err
+	}
+	if err := WriteTree(root, tree); err != nil {
+		return err
+	}
+	// services.yaml
+	svcs, err := q.ListAllServices(ctx)
+	if err != nil {
+		return err
+	}
+	if len(svcs) > 0 {
+		if err := writeYAMLFile(filepath.Join(root, "services.yaml"), svcs); err != nil {
+			return err
+		}
+	}
+	// support-centers.yaml
+	scs, err := q.ListAllSupportCenters(ctx)
+	if err != nil {
+		return err
+	}
+	if len(scs) > 0 {
+		m := map[string]SupportCenterYAML{}
+		for _, s := range scs {
+			m[s.Name] = SupportCenterYAML{
+				ID: s.ID, LongName: s.LongName, Community: s.Community, Description: s.Description,
+			}
+		}
+		if err := writeYAMLFile(filepath.Join(root, "support-centers.yaml"), m); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Export reads the whole topology domain out of the database into a Topology,

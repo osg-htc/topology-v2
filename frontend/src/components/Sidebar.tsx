@@ -11,7 +11,10 @@ const nav = [
 ];
 
 const reviewerNav = [{ href: "/proposals/review", label: "Review queue" }];
-const adminNav = [{ href: "/admin/audit", label: "Audit log" }];
+const adminNav = [
+  { href: "/admin/audit", label: "Audit log" },
+  { href: "/admin/backup", label: "Backup & restore" },
+];
 
 export function Sidebar({ session }: { session: SessionInfo }) {
   const pathname = usePathname();

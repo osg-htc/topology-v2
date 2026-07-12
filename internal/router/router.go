@@ -110,6 +110,15 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 			// Audit log is visible to managers/admins.
 			r.With(h.RequireRole(models.RoleManager, models.RoleAdministrator)).
 				Get("/audit", h.ListAuditHandler)
+
+			// Administrator-only backup/restore.
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(h.RequireRole(models.RoleAdministrator))
+				r.Post("/backup", h.CreateBackup)
+				r.Get("/backups", h.ListBackups)
+				r.Post("/restore", h.RestoreBackup)
+				r.Post("/import-github", h.ImportFromGitHub)
+			})
 		})
 	})
 

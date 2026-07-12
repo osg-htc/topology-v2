@@ -83,6 +83,25 @@ func BackupKey(masterKey []byte, backupName string) ([]byte, error) {
 	return key, nil
 }
 
+// BackupSeal encrypts a backup archive under a per-backup key derived from the
+// master key and the backup name (so each archive uses a distinct key).
+func BackupSeal(masterKey []byte, name string, plaintext []byte) ([]byte, error) {
+	key, err := BackupKey(masterKey, name)
+	if err != nil {
+		return nil, err
+	}
+	return gcmSeal(key, plaintext)
+}
+
+// BackupOpen reverses BackupSeal.
+func BackupOpen(masterKey []byte, name string, ciphertext []byte) ([]byte, error) {
+	key, err := BackupKey(masterKey, name)
+	if err != nil {
+		return nil, err
+	}
+	return gcmOpen(key, ciphertext)
+}
+
 // GenerateDEK returns a fresh 32-byte data encryption key.
 func GenerateDEK() ([]byte, error) {
 	dek := make([]byte, 32)

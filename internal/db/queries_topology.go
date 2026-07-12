@@ -140,6 +140,61 @@ func (q *Queries) SupportCenterIDByName(ctx context.Context, name string) (int64
 	return id, true
 }
 
+// ListAllServices returns the full services name->id map.
+func (q *Queries) ListAllServices(ctx context.Context) (map[string]int64, error) {
+	rows, err := q.pool.Query(ctx, `SELECT name, id FROM services ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var id int64
+		if err := rows.Scan(&name, &id); err != nil {
+			return nil, err
+		}
+		out[name] = id
+	}
+	return out, rows.Err()
+}
+
+// SupportCenterFull is a full support-center row (for export).
+type SupportCenterFull struct {
+	ID          int64
+	Name        string
+	LongName    string
+	Community   string
+	Description string
+}
+
+// ListAllSupportCenters returns all support centers.
+func (q *Queries) ListAllSupportCenters(ctx context.Context) ([]SupportCenterFull, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT id, name, COALESCE(long_name,''), COALESCE(community,''), COALESCE(description,'')
+		 FROM support_centers ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SupportCenterFull
+	for rows.Next() {
+		var s SupportCenterFull
+		if err := rows.Scan(&s.ID, &s.Name, &s.LongName, &s.Community, &s.Description); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// TruncateTopology clears all topology-domain tables (used before a restore).
+func (q *Queries) TruncateTopology(ctx context.Context) error {
+	_, err := q.pool.Exec(ctx, `TRUNCATE downtimes, resource_contacts, resource_services,
+		resources, resource_groups, sites, facilities, services, support_centers CASCADE`)
+	return err
+}
+
 // ---- inserts ----
 
 func (q *Queries) InsertFacility(ctx context.Context, r FacilityRow) (string, error) {
