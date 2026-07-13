@@ -16,6 +16,8 @@ function ResourceDetailView() {
     queryFn: () => api.resourceDetail(name),
     enabled: !!name,
   });
+  const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
+  const canManage = !!session?.user?.id;
 
   if (isLoading) return <div className="p-8 text-gray-400">Loading…</div>;
   if (!r) return <div className="p-8 text-gray-400">Resource not found.</div>;
@@ -79,8 +81,18 @@ function ResourceDetailView() {
           </Card>
 
           <Card>
-            <h3 className="mb-3 text-sm font-semibold text-gray-700">Downtimes</h3>
-            <DowntimesTable downtimes={r.downtimes ?? []} />
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">Downtimes</h3>
+              {canManage && (
+                <Link
+                  href={`/downtimes/new?resource=${encodeURIComponent(r.name)}`}
+                  className="text-xs font-medium text-brand-700 hover:underline"
+                >
+                  + Register downtime
+                </Link>
+              )}
+            </div>
+            <DowntimesTable downtimes={r.downtimes ?? []} canManage={canManage} />
           </Card>
 
           <Card>

@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -306,9 +309,86 @@ func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID
 		return h.applyFacilityProposal(ctx, p, actorID)
 	case models.KindProject:
 		return h.applyProjectProposal(ctx, p, actorID)
+	case models.KindDowntime:
+		return h.applyDowntimeProposal(ctx, p, actorID)
 	default:
 		return errUnsupportedKind
 	}
+}
+
+type downtimeProposal struct {
+	DtID        json.Number `json:"dt_id"`
+	Resource    string      `json:"resource"`
+	Class       string      `json:"class"`
+	Severity    string      `json:"severity"`
+	Description string      `json:"description"`
+	StartTime   string      `json:"start_time"`
+	EndTime     string      `json:"end_time"`
+	Services    []string    `json:"services"`
+}
+
+// downtimeTimeLayout is the canonical stored/exported downtime timestamp format.
+const downtimeTimeLayout = "Jan 02, 2006 15:04 -0700"
+
+// normalizeDowntimeTime accepts either an already-canonical downtime string or a
+// browser datetime-local / RFC3339 value and returns the canonical form (UTC).
+func normalizeDowntimeTime(s string) (string, error) {
+	if s == "" {
+		return "", fmt.Errorf("start and end times are required")
+	}
+	for _, layout := range []string{downtimeTimeLayout, "Jan 2, 2006 15:04 -0700", time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC().Format(downtimeTimeLayout), nil
+		}
+	}
+	return "", fmt.Errorf("unrecognized time %q", s)
+}
+
+func (h *Handler) applyDowntimeProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+	if p.Operation == models.OpDelete {
+		id, err := strconv.ParseInt(p.TargetName, 10, 64)
+		if err != nil {
+			return fmt.Errorf("delete downtime: bad id %q", p.TargetName)
+		}
+		return h.queries.SoftDeleteDowntimeByID(ctx, id, actorID)
+	}
+	var dp downtimeProposal
+	if err := json.Unmarshal(p.ProposedState, &dp); err != nil {
+		return err
+	}
+	start, err := normalizeDowntimeTime(dp.StartTime)
+	if err != nil {
+		return err
+	}
+	end, err := normalizeDowntimeTime(dp.EndTime)
+	if err != nil {
+		return err
+	}
+	if p.Operation == models.OpUpdate {
+		id, err := strconv.ParseInt(p.TargetName, 10, 64)
+		if err != nil {
+			return fmt.Errorf("update downtime: bad id %q", p.TargetName)
+		}
+		return h.queries.UpdateDowntimeByID(ctx, id, dp.Class, dp.Severity, dp.Description, start, end, dp.Services)
+	}
+	// create
+	rgID, err := h.queries.ResourceRGID(ctx, dp.Resource)
+	if err != nil {
+		return fmt.Errorf("create downtime: unknown resource %q", dp.Resource)
+	}
+	now := time.Now()
+	return h.queries.InsertDowntime(ctx, db.DowntimeRow{
+		DtID:         now.Unix(),
+		RGID:         rgID,
+		ResourceName: dp.Resource,
+		Class:        dp.Class,
+		Severity:     dp.Severity,
+		Description:  dp.Description,
+		StartTime:    start,
+		EndTime:      end,
+		CreatedTime:  now.UTC().Format(downtimeTimeLayout),
+		Services:     dp.Services,
+	})
 }
 
 type projectProposal struct {

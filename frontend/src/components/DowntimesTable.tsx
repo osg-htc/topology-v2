@@ -1,4 +1,7 @@
-import { Downtime } from "@/lib/api";
+"use client";
+
+import Link from "next/link";
+import { Downtime, api } from "@/lib/api";
 
 // timeframe buckets a downtime relative to now.
 function timeframe(d: Downtime): "past" | "current" | "future" {
@@ -19,10 +22,27 @@ const BADGE: Record<string, string> = {
 export function DowntimesTable({
   downtimes,
   showResource = false,
+  canManage = false,
 }: {
   downtimes: Downtime[];
   showResource?: boolean;
+  canManage?: boolean;
 }) {
+  const removeDowntime = async (d: Downtime) => {
+    if (!confirm(`Propose removal of this downtime on ${d.resource}?`)) return;
+    try {
+      const res = await api.proposals.create({
+        entity_kind: "downtime",
+        operation: "delete",
+        target_name: String(d.id),
+        submit: true,
+        proposed_state: { resource: d.resource, class: d.class },
+      });
+      window.location.href = `/proposals/view?id=${res.id}`;
+    } catch (e) {
+      alert(String(e));
+    }
+  };
   if (!downtimes || downtimes.length === 0) {
     return <p className="text-sm text-gray-400">No downtimes.</p>;
   }
@@ -46,7 +66,8 @@ export function DowntimesTable({
             <th className="py-1 pr-4">Class</th>
             <th className="py-1 pr-4">Severity</th>
             <th className="py-1 pr-4">Services</th>
-            <th className="py-1">Start → End</th>
+            <th className="py-1 pr-4">Start → End</th>
+            {canManage && <th className="py-1">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -61,10 +82,27 @@ export function DowntimesTable({
                 <td className="py-1 pr-4 text-gray-600">{d.class}</td>
                 <td className="py-1 pr-4 text-gray-600">{d.severity}</td>
                 <td className="py-1 pr-4 text-gray-500">{(d.services ?? []).join(", ") || "—"}</td>
-                <td className="py-1 text-xs text-gray-500">
+                <td className="py-1 pr-4 text-xs text-gray-500">
                   {d.start_time} → {d.end_time}
                   {d.description && <div className="text-gray-400">{d.description}</div>}
                 </td>
+                {canManage && (
+                  <td className="py-1 text-xs whitespace-nowrap">
+                    <Link
+                      href={`/downtimes/new?edit=${d.id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      edit
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => removeDowntime(d)}
+                      className="ml-3 text-red-600 hover:underline"
+                    >
+                      delete
+                    </button>
+                  </td>
+                )}
               </tr>
             );
           })}

@@ -379,6 +379,36 @@ func (q *Queries) ListDistinctContacts(ctx context.Context) ([]ContactOption, er
 	return out, rows.Err()
 }
 
+// ResourceRGID returns the active resource group id for a resource name.
+func (q *Queries) ResourceRGID(ctx context.Context, resourceName string) (string, error) {
+	var id string
+	err := q.pool.QueryRow(ctx,
+		`SELECT rg.id FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
+		 WHERE r.name = $1 AND r.deleted_at IS NULL`, resourceName).Scan(&id)
+	if err != nil {
+		return "", ErrNotFound
+	}
+	return id, nil
+}
+
+// UpdateDowntimeByID updates a downtime in place (identified by its dt_id).
+func (q *Queries) UpdateDowntimeByID(ctx context.Context, dtID int64, class, severity, description, start, end string, services []string) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE downtimes SET class=$2, severity=$3, description=$4, start_time=$5,
+		    end_time=$6, services=$7
+		 WHERE dt_id=$1 AND deleted_at IS NULL`,
+		dtID, class, nullString(severity), nullString(description), start, end, services)
+	return err
+}
+
+// SoftDeleteDowntimeByID soft-deletes a downtime.
+func (q *Queries) SoftDeleteDowntimeByID(ctx context.Context, dtID int64, byUser string) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE downtimes SET deleted_at=NOW(), deleted_by=$2 WHERE dt_id=$1 AND deleted_at IS NULL`,
+		dtID, nullString(byUser))
+	return err
+}
+
 // Institution is a cached institution registry row.
 type Institution struct {
 	IIDURI string `json:"id"`
