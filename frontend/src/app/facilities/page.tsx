@@ -58,9 +58,9 @@ export default function FacilitiesPage() {
           rowKey={(r) => r.name}
           canDelete={isReviewer}
           columns={[
-            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
-            { header: "Institution ID", cell: (r) => <span className="text-xs text-gray-500">{r.institution_id || "—"}</span> },
-            { header: "Sites", cell: (r) => <span className="text-gray-500">{r.site_count}</span> },
+            { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
+            { header: "Institution ID", sortValue: (r) => r.institution_id, cell: (r) => <span className="text-xs text-gray-500">{r.institution_id || "—"}</span> },
+            { header: "Sites", sortValue: (r) => r.site_count, cell: (r) => <span className="text-gray-500">{r.site_count}</span> },
           ]}
           expanded={(r) => <ExpandedFacility name={r.name} />}
           actions={(r) => ({

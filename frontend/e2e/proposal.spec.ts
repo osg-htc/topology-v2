@@ -15,7 +15,8 @@ test("register a resource creates a proposal", async ({ page }) => {
   const unique = `E2E_Res_${Date.now()}`;
   await page.getByPlaceholder("e.g. UChicago_OSGConnect_ap20").fill(unique);
   await page.getByPlaceholder("Search resource groups…").fill(rgName);
-  await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase()}.example.org`);
+  // Host names must be valid DNS names (no underscores).
+  await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase().replace(/_/g, "-")}.example.org`);
   // A contact is required for a complete registration. As an admin the person
   // field is a live user search ("Search people…").
   await page.getByPlaceholder("Search people…").first().fill("E2E Admin");

@@ -26,7 +26,16 @@ export function DowntimesTable({
   if (!downtimes || downtimes.length === 0) {
     return <p className="text-sm text-gray-400">No downtimes.</p>;
   }
-  const sorted = [...downtimes].sort((a, b) => (a.start_time < b.start_time ? 1 : -1));
+  // Current first, then future, then past; within a bucket, most recently
+  // started first. Expired downtimes sink to the bottom.
+  const bucketRank = { current: 0, future: 1, past: 2 };
+  const startMs = (d: Downtime) => Date.parse(d.start_time.replace(/ ([+-]\d{4})$/, " GMT$1")) || 0;
+  const sorted = [...downtimes].sort((a, b) => {
+    const ra = bucketRank[timeframe(a)];
+    const rb = bucketRank[timeframe(b)];
+    if (ra !== rb) return ra - rb;
+    return startMs(b) - startMs(a);
+  });
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">

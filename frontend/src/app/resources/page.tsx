@@ -83,11 +83,12 @@ export default function ResourcesPage() {
           rowKey={(r) => r.name}
           canDelete={isReviewer}
           columns={[
-            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}</span> },
-            { header: "Host name", cell: (r) => <span className="text-gray-600">{r.fqdn}</span> },
-            { header: "Resource group", cell: (r) => <span className="text-gray-500">{r.resource_group}</span> },
+            { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}</span> },
+            { header: "Host name", sortValue: (r) => r.fqdn, cell: (r) => <span className="text-gray-600">{r.fqdn}</span> },
+            { header: "Resource group", sortValue: (r) => r.resource_group, cell: (r) => <span className="text-gray-500">{r.resource_group}</span> },
             {
               header: "Status",
+              sortValue: (r) => (r.active ? "active" : "inactive"),
               cell: (r) => (
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${

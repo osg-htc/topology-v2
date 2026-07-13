@@ -61,11 +61,11 @@ export default function ResourceGroupsPage() {
           rowKey={(r) => r.name}
           canDelete={isReviewer}
           columns={[
-            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
-            { header: "Site", cell: (r) => <span className="text-gray-600">{r.site}</span> },
-            { header: "Facility", cell: (r) => <span className="text-gray-500">{r.facility}</span> },
-            { header: "Resources", cell: (r) => <span className="text-gray-500">{r.resource_count}</span> },
-            { header: "Production", cell: (r) => <span className="text-gray-500">{r.production ? "yes" : "no"}</span> },
+            { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
+            { header: "Site", sortValue: (r) => r.site, cell: (r) => <span className="text-gray-600">{r.site}</span> },
+            { header: "Facility", sortValue: (r) => r.facility, cell: (r) => <span className="text-gray-500">{r.facility}</span> },
+            { header: "Resources", sortValue: (r) => r.resource_count, cell: (r) => <span className="text-gray-500">{r.resource_count}</span> },
+            { header: "Production", sortValue: (r) => (r.production ? 1 : 0), cell: (r) => <span className="text-gray-500">{r.production ? "yes" : "no"}</span> },
           ]}
           expanded={(r) => <ExpandedRG name={r.name} />}
           actions={(r) => ({

@@ -8,6 +8,8 @@ export type Column<T> = {
   header: string;
   cell: (row: T) => ReactNode;
   className?: string;
+  // sortValue enables click-to-sort on this column. Omit to make it unsortable.
+  sortValue?: (row: T) => string | number | boolean | null | undefined;
 };
 
 // RowActions describes the pop-out (standalone page), edit (form), and delete
@@ -65,23 +67,50 @@ export function DataTable<T>({
   canDelete?: boolean;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null);
   const colSpan = columns.length + (actions ? 1 : 0);
+
+  const toggleSort = (i: number) => {
+    if (!columns[i].sortValue) return;
+    setSort((s) => (s && s.col === i ? { col: i, dir: (s.dir * -1) as 1 | -1 } : { col: i, dir: 1 }));
+  };
+
+  const sortedRows = sort
+    ? [...rows].sort((a, b) => {
+        const sv = columns[sort.col].sortValue!;
+        const va = sv(a);
+        const vb = sv(b);
+        const na = va == null ? "" : va;
+        const nb = vb == null ? "" : vb;
+        if (typeof na === "number" && typeof nb === "number") return (na - nb) * sort.dir;
+        return String(na).localeCompare(String(nb), undefined, { numeric: true }) * sort.dir;
+      })
+    : rows;
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
           <tr>
-            {columns.map((c) => (
-              <th key={c.header} className={`px-4 py-2 ${c.className ?? ""}`}>
+            {columns.map((c, i) => (
+              <th
+                key={c.header}
+                className={`px-4 py-2 ${c.className ?? ""} ${c.sortValue ? "cursor-pointer select-none hover:text-gray-800" : ""}`}
+                onClick={() => toggleSort(i)}
+              >
                 {c.header}
+                {c.sortValue && (
+                  <span className="ml-1 text-gray-400">
+                    {sort && sort.col === i ? (sort.dir === 1 ? "▲" : "▼") : "⇅"}
+                  </span>
+                )}
               </th>
             ))}
             {actions && <th className="px-4 py-2" />}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {rows.map((row) => {
+          {sortedRows.map((row) => {
             const key = rowKey(row);
             const isOpen = open === key;
             return (

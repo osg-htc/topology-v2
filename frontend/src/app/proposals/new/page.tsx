@@ -19,7 +19,13 @@ const CONTACT_TYPES = [
 const RANKS = ["Primary", "Secondary", "Tertiary"];
 const COMMON_TAGS = ["OSPool", "CC*"];
 
-type ContactRow = { type: string; rank: string; name: string; id: string };
+// A hostname must be a valid (dotted) DNS name.
+const HOSTNAME_RE =
+  /^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
+const isHostname = (h: string) => HOSTNAME_RE.test(h.trim());
+
+// Rank is derived from a contact's order within its type (1st = Primary, …).
+type ContactRow = { type: string; name: string; id: string };
 type ServiceRow = { name: string; description: string };
 
 function NewResourceForm() {
@@ -35,14 +41,15 @@ function NewResourceForm() {
   const [tags, setTags] = useState<string[]>([]);
   const [allowedVOs, setAllowedVOs] = useState<string[]>([]);
   const [contacts, setContacts] = useState<ContactRow[]>([
-    { type: "Administrative Contact", rank: "Primary", name: "", id: "" },
-    { type: "Security Contact", rank: "Primary", name: "", id: "" },
+    { type: "Administrative Contact", name: "", id: "" },
+    { type: "Security Contact", name: "", id: "" },
   ]);
   const [services, setServices] = useState<ServiceRow[]>([{ name: "", description: "" }]);
   const [advanced, setAdvanced] = useState(false);
   const [advancedJSON, setAdvancedJSON] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   // Edit mode: load the existing resource and prefill.
   const { data: editData } = useQuery({
@@ -62,10 +69,14 @@ function NewResourceForm() {
     setAllowedVOs(editData.allowed_vos ?? []);
     if (editData.services?.length)
       setServices(editData.services.map((s) => ({ name: s.name, description: s.description })));
-    if (editData.contacts?.length)
-      setContacts(
-        editData.contacts.map((c) => ({ type: c.contact_type, rank: c.rank, name: c.name, id: c.id })),
+    if (editData.contacts?.length) {
+      // Order contacts within each type by their existing rank.
+      const rankIdx = (r: string) => Math.max(0, RANKS.indexOf(r));
+      const ordered = [...editData.contacts].sort(
+        (a, b) => a.contact_type.localeCompare(b.contact_type) || rankIdx(a.rank) - rankIdx(b.rank),
       );
+      setContacts(ordered.map((c) => ({ type: c.contact_type, name: c.name, id: c.id })));
+    }
   }, [editData]);
 
   const { data: rgs } = useQuery({ queryKey: ["resource-groups", false], queryFn: () => api.resourceGroups() });
@@ -91,15 +102,31 @@ function NewResourceForm() {
     for (const s of services) if (s.name) svc[s.name] = s.description ? { Description: s.description } : {};
     if (Object.keys(svc).length) resource.Services = svc;
 
+    // Rank is derived from order within each contact type (1st = Primary, …).
     const cl: Record<string, Record<string, unknown>> = {};
+    const perType: Record<string, number> = {};
     for (const c of contacts) {
       if (!c.name && !c.id) continue;
+      const n = perType[c.type] ?? 0;
+      perType[c.type] = n + 1;
+      const rank = RANKS[Math.min(n, RANKS.length - 1)];
       cl[c.type] = cl[c.type] || {};
-      cl[c.type][c.rank] = { Name: c.name, ID: c.id };
+      cl[c.type][rank] = { Name: c.name, ID: c.id };
     }
     if (Object.keys(cl).length) resource.ContactLists = cl;
     return resource;
   };
+
+  // Validation state for red-marking on submit.
+  const badHostname = hostname !== "" && !isHostname(hostname);
+  const badAliases = aliases.some((a) => !isHostname(a));
+  const invalid = {
+    name: !name,
+    rg: !rgValid,
+    hostname: !hostname || badHostname,
+    contact: !hasContact,
+  };
+  const errCls = (bad: boolean) => (showErrors && bad ? " border-red-500 ring-1 ring-red-400" : "");
 
   const toggleAdvanced = () => {
     if (!advanced) setAdvancedJSON(JSON.stringify(buildResource(), null, 2));
@@ -108,6 +135,14 @@ function NewResourceForm() {
 
   const submit = async (asDraft: boolean) => {
     setErr("");
+    // Full validation only when submitting for review (drafts may be incomplete).
+    if (!asDraft && !advanced) {
+      if (invalid.name || invalid.rg || invalid.hostname || invalid.contact || badAliases) {
+        setShowErrors(true);
+        setErr("Please fix the highlighted fields.");
+        return;
+      }
+    }
     setBusy(true);
     try {
       let resource: unknown;
@@ -133,8 +168,23 @@ function NewResourceForm() {
 
   const setContact = (i: number, patch: Partial<ContactRow>) =>
     setContacts(contacts.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const removeContact = (i: number) => setContacts(contacts.filter((_, j) => j !== i));
+  const moveContact = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= contacts.length) return;
+    const next = [...contacts];
+    [next[i], next[j]] = [next[j], next[i]];
+    setContacts(next);
+  };
   const setService = (i: number, patch: Partial<ServiceRow>) =>
     setServices(services.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+
+  // Rank label for a contact = its position within its type.
+  const rankLabel = (i: number) => {
+    const t = contacts[i].type;
+    const n = contacts.slice(0, i + 1).filter((c) => c.type === t).length - 1;
+    return RANKS[Math.min(n, RANKS.length - 1)];
+  };
 
   return (
     <div className="p-8">
@@ -148,7 +198,7 @@ function NewResourceForm() {
           <div className="space-y-4">
             <div>
               <label className={label}>Resource name</label>
-              <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. UChicago_OSGConnect_ap20" />
+              <input className={input + errCls(invalid.name)} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. UChicago_OSGConnect_ap20" />
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between">
@@ -157,7 +207,7 @@ function NewResourceForm() {
                   + New resource group
                 </Link>
               </div>
-              <input className={input} list="rg-options" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="Search resource groups…" />
+              <input className={input + errCls(invalid.rg)} list="rg-options" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="Search resource groups…" />
               <datalist id="rg-options">
                 {(rgs ?? []).map((g) => (
                   <option key={g.name} value={g.name}>{g.site} · {g.facility}</option>
@@ -169,11 +219,13 @@ function NewResourceForm() {
             </div>
             <div>
               <label className={label}>Host name</label>
-              <input className={input} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="host.example.org" />
+              <input className={input + errCls(invalid.hostname)} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="host.example.org" />
+              {badHostname && <p className="mt-1 text-xs text-red-600">Must be a valid DNS host name (e.g. host.example.org).</p>}
             </div>
             <div>
               <label className={label}>Host name aliases</label>
               <MultiSelect options={[]} value={aliases} onChange={setAliases} placeholder="Add an alias and press Enter…" />
+              {badAliases && <p className="mt-1 text-xs text-red-600">Every alias must be a valid DNS host name.</p>}
             </div>
             <div>
               <label className={label}>Description</label>
@@ -227,36 +279,44 @@ function NewResourceForm() {
             <h3 className="text-sm font-semibold text-gray-700">Contacts</h3>
             <button
               className="text-xs text-brand-600 hover:underline"
-              onClick={() => setContacts([...contacts, { type: "Administrative Contact", rank: "Primary", name: "", id: "" }])}
+              onClick={() => setContacts([...contacts, { type: "Administrative Contact", name: "", id: "" }])}
             >
               + Add contact
             </button>
           </div>
-          {!hasContact && <p className="mb-2 text-xs text-amber-600">At least one contact is required.</p>}
+          {showErrors && invalid.contact && (
+            <p className="mb-2 text-xs text-red-600">At least one contact is required.</p>
+          )}
           <div className="space-y-2">
             {contacts.map((c, i) => (
-              <div key={i} className="grid grid-cols-4 gap-2">
-                <select className={input} value={c.type} onChange={(e) => setContact(i, { type: e.target.value })}>
-                  {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <select className={input} value={c.rank} onChange={(e) => setContact(i, { rank: e.target.value })}>
-                  {RANKS.map((rk) => <option key={rk} value={rk}>{rk}</option>)}
-                </select>
-                <ContactPersonInput
-                  name={c.name}
-                  id={c.id}
-                  isAdmin={isAdmin}
-                  fallback={knownContacts ?? []}
-                  onChange={(nm, cid) => setContact(i, { name: nm, id: cid })}
-                />
-                <input className={input} placeholder="ID" value={c.id} onChange={(e) => setContact(i, { id: e.target.value })} />
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex flex-col text-gray-400">
+                  <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === 0} onClick={() => moveContact(i, -1)} aria-label="Move up">▲</button>
+                  <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === contacts.length - 1} onClick={() => moveContact(i, 1)} aria-label="Move down">▼</button>
+                </div>
+                <span className="w-16 shrink-0 text-xs text-gray-400">{rankLabel(i)}</span>
+                <div className="grid flex-1 grid-cols-3 gap-2">
+                  <select className={input} value={c.type} onChange={(e) => setContact(i, { type: e.target.value })}>
+                    {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <ContactPersonInput
+                    name={c.name}
+                    id={c.id}
+                    isAdmin={isAdmin}
+                    fallback={knownContacts ?? []}
+                    onChange={(nm, cid) => setContact(i, { name: nm, id: cid })}
+                  />
+                  <input className={input} placeholder="ID" value={c.id} onChange={(e) => setContact(i, { id: e.target.value })} />
+                </div>
+                <button type="button" className="text-gray-300 hover:text-red-600" onClick={() => removeContact(i)} aria-label="Remove contact">×</button>
               </div>
             ))}
           </div>
           <p className="mt-2 text-xs text-gray-400">
+            Order within a contact type sets its rank (Primary, Secondary, Tertiary) — use ▲▼ to reorder.
             {isAdmin
-              ? "Type to search all users; selecting one fills the contact id."
-              : "Pick from known contacts. Need someone new? Ask an administrator or use an invite link."}
+              ? " Type to search all users; selecting one fills the contact id."
+              : " Pick from known contacts, or ask an administrator / use an invite link for someone new."}
           </p>
         </Card>
 
@@ -282,7 +342,7 @@ function NewResourceForm() {
 
         {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex gap-3">
-          <button className={btn} disabled={busy || !name || !rgValid || (!advanced && (!hostname || !hasContact))} onClick={() => submit(false)}>
+          <button className={btn} disabled={busy} onClick={() => submit(false)}>
             Submit for review
           </button>
           <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>

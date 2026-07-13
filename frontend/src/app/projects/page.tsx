@@ -45,11 +45,11 @@ export default function ProjectsPage() {
           rowKey={(r) => r.name}
           canDelete={isReviewer}
           columns={[
-            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
-            { header: "PI", cell: (r) => <span className="text-gray-600">{r.pi_name}</span> },
-            { header: "Organization", cell: (r) => <span className="text-gray-500">{r.organization}</span> },
-            { header: "Field of science", cell: (r) => <span className="text-gray-500">{r.field_of_science}</span> },
-            { header: "Sponsor", cell: (r) => <span className="text-gray-500">{r.sponsor_name || "—"}</span> },
+            { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
+            { header: "PI", sortValue: (r) => r.pi_name, cell: (r) => <span className="text-gray-600">{r.pi_name}</span> },
+            { header: "Organization", sortValue: (r) => r.organization, cell: (r) => <span className="text-gray-500">{r.organization}</span> },
+            { header: "Field of science", sortValue: (r) => r.field_of_science, cell: (r) => <span className="text-gray-500">{r.field_of_science}</span> },
+            { header: "Sponsor", sortValue: (r) => r.sponsor_name, cell: (r) => <span className="text-gray-500">{r.sponsor_name || "—"}</span> },
           ]}
           actions={(r) => ({
             detailHref: `/projects/detail?name=${encodeURIComponent(r.name)}`,

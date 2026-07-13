@@ -61,10 +61,10 @@ export default function SitesPage() {
           rowKey={(r) => r.name}
           canDelete={isReviewer}
           columns={[
-            { header: "Name", cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
-            { header: "Facility", cell: (r) => <span className="text-gray-600">{r.facility}</span> },
-            { header: "City", cell: (r) => <span className="text-gray-500">{r.city}</span> },
-            { header: "Country", cell: (r) => <span className="text-gray-500">{r.country}</span> },
+            { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}{r.deleted && <span className="ml-2 text-xs text-red-500">(inactive)</span>}</span> },
+            { header: "Facility", sortValue: (r) => r.facility, cell: (r) => <span className="text-gray-600">{r.facility}</span> },
+            { header: "City", sortValue: (r) => r.city, cell: (r) => <span className="text-gray-500">{r.city}</span> },
+            { header: "Country", sortValue: (r) => r.country, cell: (r) => <span className="text-gray-500">{r.country}</span> },
           ]}
           expanded={(r) => <ExpandedSite name={r.name} />}
           actions={(r) => ({

@@ -43,7 +43,9 @@ export default function ReviewQueuePage() {
                   {p.operation} {p.entity_kind}
                 </span>
                 {p.target_name && <span className="ml-2 text-sm text-gray-500">{p.target_name}</span>}
-                <div className="text-xs text-gray-400">by {p.created_by.slice(0, 8)}</div>
+                <div className="text-xs text-gray-400">
+                  submitted {new Date(p.updated_at).toLocaleString()} · by {p.created_by.slice(0, 8)}
+                </div>
               </div>
               <StatusBadge status={p.status} />
             </Link>
