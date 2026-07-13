@@ -39,7 +39,7 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, "target_user_id required")
 			return
 		}
-	case models.InviteRoleClaim:
+	case models.InviteRoleClaim, models.InviteReplacementRequest:
 		if req.Claim == nil || req.Claim.EntityID == "" || req.Claim.ContactType == "" {
 			respondError(w, http.StatusBadRequest, "claim with entity_id and contact_type required")
 			return

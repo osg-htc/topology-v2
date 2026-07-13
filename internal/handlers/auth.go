@@ -581,29 +581,40 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cilogon := h.primaryCILogonID(ctx, u.ID)
-		switch claim.EntityKind {
-		case models.KindResource, "":
-			resID, err := h.queries.ResourceIDByName(ctx, claim.EntityID)
-			if err != nil {
-				respondError(w, http.StatusBadRequest, "claim target resource not found")
-				return
-			}
-			if err := h.queries.AddResourceContact(ctx, resID, claim.ContactType, claim.Rank,
-				u.DisplayName, cilogon, u.ID); err != nil {
-				respondError(w, http.StatusInternalServerError, "assigning responsibility")
-				return
-			}
-		case models.KindResourceGroup, models.KindSite, models.KindFacility:
-			if err := h.queries.AddEntityContact(ctx, claim.EntityKind, claim.EntityID,
-				claim.ContactType, claim.Rank, u.DisplayName, cilogon, u.ID); err != nil {
-				respondError(w, http.StatusInternalServerError, "assigning responsibility")
-				return
-			}
-		default:
+		kind := claim.EntityKind
+		if kind == "" {
+			kind = models.KindResource
+		}
+		if kind != models.KindResource && kind != models.KindResourceGroup &&
+			kind != models.KindSite && kind != models.KindFacility {
 			respondError(w, http.StatusBadRequest, "unsupported claim entity kind")
 			return
 		}
-		h.audit(ctx, u.ID, "role_claim.accept", claim.EntityKind, claim.EntityID, "", inv.ClaimJSON)
+		// Take over the named contact slot (soft-deletes any current holder of the
+		// same type+rank so a slot has a single holder).
+		if err := h.queries.ReplaceContactSlot(ctx, kind, claim.EntityID,
+			claim.ContactType, claim.Rank, u.DisplayName, cilogon, u.ID, u.ID); err != nil {
+			respondError(w, http.StatusBadRequest, "assigning responsibility: "+err.Error())
+			return
+		}
+		h.audit(ctx, u.ID, "role_claim.accept", kind, claim.EntityID, "", inv.ClaimJSON)
+	}
+
+	// Apply a replacement_request: file a request for the accepting user to take
+	// over the named contact slot (the incumbent, or a manager, then approves it).
+	if inv.Kind == models.InviteReplacementRequest && len(inv.ClaimJSON) > 0 {
+		var claim models.RoleClaim
+		if err := json.Unmarshal(inv.ClaimJSON, &claim); err != nil {
+			respondError(w, http.StatusInternalServerError, "invalid claim")
+			return
+		}
+		if _, herr := h.fileReplacement(r, createReplacementRequest{
+			EntityKind: claim.EntityKind, EntityName: claim.EntityID,
+			ContactType: claim.ContactType, Rank: claim.Rank, RequesterUserID: u.ID,
+		}); herr != nil {
+			respondError(w, herr.status, herr.msg)
+			return
+		}
 	}
 
 	if err := h.queries.MarkInviteUsed(ctx, inv.ID, u.ID); err != nil {

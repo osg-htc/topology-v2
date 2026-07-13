@@ -108,8 +108,9 @@ type Invite struct {
 
 // Invite kinds.
 const (
-	InviteAccountLink = "account_link"
-	InviteRoleClaim   = "role_claim"
+	InviteAccountLink        = "account_link"
+	InviteRoleClaim          = "role_claim"
+	InviteReplacementRequest = "replacement_request"
 )
 
 // RoleClaim describes a responsibility offered by a role_claim invite, e.g.

@@ -186,6 +186,27 @@ export const api = {
         body: JSON.stringify(body),
       }),
   },
+  contactReplacements: {
+    create: (body: {
+      entity_kind: string;
+      entity_name: string;
+      contact_type: string;
+      rank: string;
+      note?: string;
+    }) =>
+      fetchJSON<{ id: string; status: string }>("/contact-replacements", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    mine: () => fetchJSON<ContactReplacement[]>("/contact-replacements/mine"),
+    incoming: () => fetchJSON<ContactReplacement[]>("/contact-replacements/incoming"),
+    approve: (id: string) =>
+      fetchJSON<{ status: string }>(`/contact-replacements/${id}/approve`, { method: "POST" }),
+    reject: (id: string) =>
+      fetchJSON<{ status: string }>(`/contact-replacements/${id}/reject`, { method: "POST" }),
+    withdraw: (id: string) =>
+      fetchJSON<{ status: string }>(`/contact-replacements/${id}/withdraw`, { method: "POST" }),
+  },
   audit: () => fetchJSON<AuditEntry[]>("/audit"),
   userLabels: (ids: string[]) =>
     fetchJSON<UserLabelT[]>(`/user-labels?ids=${encodeURIComponent(ids.join(","))}`),
@@ -419,6 +440,20 @@ export interface AdminUser {
     email?: string;
     cilogon_id?: string;
   }[];
+}
+
+export interface ContactReplacement {
+  id: string;
+  entity_kind: string;
+  entity_name: string;
+  contact_type: string;
+  rank: string;
+  incumbent_name: string;
+  incumbent_user_id?: string;
+  requester_user_id: string;
+  requester_name: string;
+  status: string;
+  note?: string;
 }
 
 export interface InvitePreview {

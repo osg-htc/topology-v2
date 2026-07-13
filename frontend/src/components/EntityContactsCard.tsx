@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, EntityContact } from "@/lib/api";
 import { Card } from "./ui";
 import { InviteContactButton } from "./InviteContactButton";
+import { ContactReplaceActions } from "./ContactReplaceActions";
 
 // EntityContactsCard renders the contacts registered on a resource group / site
 // / facility, with an owner-only "Invite a contact" action.
@@ -37,7 +38,8 @@ export function EntityContactsCard({
               <th className="py-1 pr-4">Type</th>
               <th className="py-1 pr-4">Rank</th>
               <th className="py-1 pr-4">Name</th>
-              <th className="py-1">ID</th>
+              <th className="py-1 pr-4">ID</th>
+              {canManage && <th className="py-1">Take over</th>}
             </tr>
           </thead>
           <tbody>
@@ -46,7 +48,17 @@ export function EntityContactsCard({
                 <td className="py-1 pr-4 text-gray-700">{c.contact_type}</td>
                 <td className="py-1 pr-4 text-gray-500">{c.rank}</td>
                 <td className="py-1 pr-4 text-gray-700">{c.name || "—"}</td>
-                <td className="py-1 text-xs text-gray-400">{c.id || "—"}</td>
+                <td className="py-1 pr-4 text-xs text-gray-400">{c.id || "—"}</td>
+                {canManage && (
+                  <td className="py-1">
+                    <ContactReplaceActions
+                      entityKind={entityKind}
+                      entityName={entityName}
+                      contactType={c.contact_type}
+                      rank={c.rank}
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

@@ -9,6 +9,7 @@ import { PageHeader, Card } from "@/components/ui";
 import { DetailField } from "@/components/DetailField";
 import { DowntimesTable } from "@/components/DowntimesTable";
 import { InviteContactButton } from "@/components/InviteContactButton";
+import { ContactReplaceActions } from "@/components/ContactReplaceActions";
 
 function ResourceDetailView() {
   const name = useSearchParams().get("name") || "";
@@ -112,7 +113,8 @@ function ResourceDetailView() {
                     <th className="py-1 pr-4">Type</th>
                     <th className="py-1 pr-4">Rank</th>
                     <th className="py-1 pr-4">Name</th>
-                    <th className="py-1">ID</th>
+                    <th className="py-1 pr-4">ID</th>
+                    {canManage && <th className="py-1">Take over</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -131,7 +133,21 @@ function ResourceDetailView() {
                       </td>
                       <td className="py-1 pr-4 text-gray-500">{c.rank}</td>
                       <td className="py-1 pr-4 text-gray-700">{c.name || "—"}</td>
-                      <td className="py-1 text-xs text-gray-400">{c.id || "—"}</td>
+                      <td className="py-1 pr-4 text-xs text-gray-400">{c.id || "—"}</td>
+                      {canManage && (
+                        <td className="py-1">
+                          {/* Only own (non-inherited) slots can be taken over here;
+                              inherited contacts are managed on the parent entity. */}
+                          {!c.inherited_from && (
+                            <ContactReplaceActions
+                              entityKind="resource"
+                              entityName={r.name}
+                              contactType={c.contact_type}
+                              rank={c.rank}
+                            />
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

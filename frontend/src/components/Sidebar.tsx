@@ -13,6 +13,7 @@ const nav = [
   { href: "/projects", label: "Projects" },
   { href: "/downtimes", label: "Downtimes" },
   { href: "/proposals", label: "My requests" },
+  { href: "/replacements", label: "Contact hand-offs" },
 ];
 
 const reviewerNav = [{ href: "/proposals/review", label: "Review queue" }];

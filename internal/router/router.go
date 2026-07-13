@@ -129,6 +129,17 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 				r.Post("/{id}/reject", h.RejectProposal)
 			})
 
+			// Contact-replacement requests: propose yourself for a contact slot;
+			// the incumbent (or a manager/admin) approves.
+			r.Route("/contact-replacements", func(r chi.Router) {
+				r.Post("/", h.CreateContactReplacement)
+				r.Get("/mine", h.ListMyReplacements)
+				r.Get("/incoming", h.ListIncomingReplacements)
+				r.Post("/{id}/approve", h.ApproveReplacement)
+				r.Post("/{id}/reject", h.RejectReplacement)
+				r.Post("/{id}/withdraw", h.WithdrawReplacement)
+			})
+
 			// Audit log is visible to managers/admins.
 			r.With(h.RequireRole(models.RoleManager, models.RoleAdministrator)).
 				Get("/audit", h.ListAuditHandler)
