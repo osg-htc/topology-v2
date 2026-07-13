@@ -71,7 +71,7 @@ function RGDetailView() {
       <EntityContactsCard entityKind="resource_group" entityName={rg.name} contacts={rg.contacts} />
       <Card className="mt-6">
         <h3 className="mb-3 text-sm font-semibold text-gray-700">Downtimes</h3>
-        <DowntimesTable downtimes={downtimes ?? []} showResource />
+        <DowntimesTable downtimes={downtimes ?? []} showResource cap />
       </Card>
     </div>
   );

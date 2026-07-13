@@ -23,10 +23,14 @@ export function DowntimesTable({
   downtimes,
   showResource = false,
   canManage = false,
+  cap = false,
 }: {
   downtimes: Downtime[];
   showResource?: boolean;
   canManage?: boolean;
+  // cap limits the table to ~5 rows of height with a scrollbar and a sticky
+  // header, so a long downtime history doesn't dominate a detail page.
+  cap?: boolean;
 }) {
   const removeDowntime = async (d: Downtime) => {
     if (!confirm(`Propose removal of this downtime on ${d.resource}?`)) return;
@@ -57,9 +61,9 @@ export function DowntimesTable({
     return startMs(b) - startMs(a);
   });
   return (
-    <div className="overflow-x-auto">
+    <div className={`overflow-x-auto${cap ? " max-h-60 overflow-y-auto" : ""}`}>
       <table className="min-w-full text-sm">
-        <thead className="text-left text-xs uppercase tracking-wide text-gray-400">
+        <thead className={`text-left text-xs uppercase tracking-wide text-gray-400${cap ? " sticky top-0 bg-white" : ""}`}>
           <tr>
             <th className="py-1 pr-4">When</th>
             {showResource && <th className="py-1 pr-4">Resource</th>}
