@@ -317,6 +317,13 @@ export interface ResourceContact {
   rank: string;
   name: string;
   id: string;
+  inherited_from?: string;
+}
+export interface EntityContact {
+  contact_type: string;
+  rank: string;
+  name: string;
+  id: string;
 }
 export interface ResourceService {
   name: string;
@@ -352,6 +359,7 @@ export interface RGDetail {
   group_description: string;
   deleted: boolean;
   resources: string[];
+  contacts?: EntityContact[];
 }
 export interface SiteDetail {
   name: string;
@@ -367,6 +375,7 @@ export interface SiteDetail {
   latitude?: number;
   longitude?: number;
   resource_groups: string[];
+  contacts?: EntityContact[];
 }
 export interface FacilityDetail {
   name: string;
@@ -374,6 +383,7 @@ export interface FacilityDetail {
   institution_id: string;
   deleted: boolean;
   sites: string[];
+  contacts?: EntityContact[];
 }
 
 export interface OIDCConfig {

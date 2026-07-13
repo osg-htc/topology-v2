@@ -3,13 +3,51 @@
   "$id": "https://topology.opensciencegrid.org/proposal/resource_group/v1",
   "title": "Resource group change proposal (v1)",
   "type": "object",
-  "required": ["name", "site"],
+  "required": [
+    "name",
+    "site"
+  ],
   "additionalProperties": false,
   "properties": {
-    "name": { "type": "string", "minLength": 1 },
-    "site": { "type": "string", "minLength": 1 },
-    "production": { "type": ["boolean", "null"] },
-    "support_center": { "type": "string" },
-    "group_description": { "type": "string" }
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "site": {
+      "type": "string",
+      "minLength": 1
+    },
+    "production": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "support_center": {
+      "type": "string"
+    },
+    "group_description": {
+      "type": "string"
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "contact_type": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    }
   }
 }

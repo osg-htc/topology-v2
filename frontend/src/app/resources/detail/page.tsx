@@ -102,7 +102,17 @@ function ResourceDetailView() {
                 <tbody>
                   {r.contacts.map((c, i) => (
                     <tr key={i} className="border-t border-gray-100">
-                      <td className="py-1 pr-4 text-gray-700">{c.contact_type}</td>
+                      <td className="py-1 pr-4 text-gray-700">
+                        {c.contact_type}
+                        {c.inherited_from && (
+                          <span
+                            className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500"
+                            title={`Inherited from the ${c.inherited_from}`}
+                          >
+                            inherited · {c.inherited_from}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-1 pr-4 text-gray-500">{c.rank}</td>
                       <td className="py-1 pr-4 text-gray-700">{c.name || "—"}</td>
                       <td className="py-1 text-xs text-gray-400">{c.id || "—"}</td>

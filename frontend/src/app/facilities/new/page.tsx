@@ -5,12 +5,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewFacilityForm() {
   const router = useRouter();
   const editName = useSearchParams().get("edit");
   const [name, setName] = useState(editName ?? "");
   const [institutionID, setInstitutionID] = useState("");
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const { data: institutions } = useQuery({ queryKey: ["institutions"], queryFn: api.institutions });
@@ -23,6 +25,7 @@ function NewFacilityForm() {
     if (!editData) return;
     setName(editData.name);
     setInstitutionID(editData.institution_id);
+    setContacts(fromEntityContacts(editData.contacts));
   }, [editData]);
 
   const submit = async (asDraft: boolean) => {
@@ -34,7 +37,7 @@ function NewFacilityForm() {
         operation: editName ? "update" : "create",
         target_name: editName ?? undefined,
         submit: !asDraft,
-        proposed_state: { name, institution_id: institutionID },
+        proposed_state: { name, institution_id: institutionID, contacts: toEntityContacts(contacts) },
       });
       router.push(`/proposals/view?id=${res.id}`);
     } catch (e) {
@@ -73,17 +76,20 @@ function NewFacilityForm() {
               Institutions come from the registry (Institutions page → Sync).
             </p>
           </div>
-          {err && <p className="text-sm text-red-600">{err}</p>}
-          <div className="flex gap-3 pt-2">
-            <button className={btn} disabled={busy || !name} onClick={() => submit(false)}>
-              Submit for review
-            </button>
-            <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>
-              Save draft
-            </button>
-          </div>
         </div>
       </Card>
+      <div className="mt-6 max-w-xl">
+        <EntityContactsEditor rows={contacts} onChange={setContacts} />
+      </div>
+      {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+      <div className="mt-4 flex gap-3">
+        <button className={btn} disabled={busy || !name} onClick={() => submit(false)}>
+          Submit for review
+        </button>
+        <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>
+          Save draft
+        </button>
+      </div>
     </div>
   );
 }

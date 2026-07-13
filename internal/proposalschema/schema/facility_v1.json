@@ -3,10 +3,37 @@
   "$id": "https://topology.opensciencegrid.org/proposal/facility/v1",
   "title": "Facility change proposal (v1)",
   "type": "object",
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "additionalProperties": false,
   "properties": {
-    "name": { "type": "string", "minLength": 1 },
-    "institution_id": { "type": "string" }
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "institution_id": {
+      "type": "string"
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "contact_type": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    }
   }
 }

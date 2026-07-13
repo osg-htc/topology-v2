@@ -5,10 +5,12 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewSiteForm() {
   const router = useRouter();
   const editName = useSearchParams().get("edit");
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [f, setF] = useState({
     name: "",
     facility: "",
@@ -48,6 +50,7 @@ function NewSiteForm() {
       latitude: editData.latitude != null ? String(editData.latitude) : "",
       longitude: editData.longitude != null ? String(editData.longitude) : "",
     });
+    setContacts(fromEntityContacts(editData.contacts));
   }, [editData]);
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -63,6 +66,7 @@ function NewSiteForm() {
       }
       if (f.latitude) proposed.latitude = Number(f.latitude);
       if (f.longitude) proposed.longitude = Number(f.longitude);
+      proposed.contacts = toEntityContacts(contacts);
       const res = await api.proposals.create({
         entity_kind: "site",
         operation: editName ? "update" : "create",
@@ -112,13 +116,16 @@ function NewSiteForm() {
             <div><label className={label}>Latitude</label><input className={input} value={f.latitude} onChange={set("latitude")} /></div>
             <div><label className={label}>Longitude</label><input className={input} value={f.longitude} onChange={set("longitude")} /></div>
           </div>
-          {err && <p className="text-sm text-red-600">{err}</p>}
-          <div className="flex gap-3 pt-2">
-            <button className={btn} disabled={busy || !f.name || !f.facility} onClick={() => submit(false)}>Submit for review</button>
-            <button className={btnSecondary} disabled={busy || !f.name} onClick={() => submit(true)}>Save draft</button>
-          </div>
         </div>
       </Card>
+      <div className="mt-6 max-w-xl">
+        <EntityContactsEditor rows={contacts} onChange={setContacts} />
+      </div>
+      {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+      <div className="mt-4 flex gap-3">
+        <button className={btn} disabled={busy || !f.name || !f.facility} onClick={() => submit(false)}>Submit for review</button>
+        <button className={btnSecondary} disabled={busy || !f.name} onClick={() => submit(true)}>Save draft</button>
+      </div>
     </div>
   );
 }

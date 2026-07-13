@@ -360,11 +360,12 @@ func sponsorTypeName(sponsor map[string]interface{}) (string, string) {
 }
 
 type rgProposal struct {
-	Name             string `json:"name"`
-	Site             string `json:"site"`
-	Production       *bool  `json:"production"`
-	SupportCenter    string `json:"support_center"`
-	GroupDescription string `json:"group_description"`
+	Name             string             `json:"name"`
+	Site             string             `json:"site"`
+	Production       *bool              `json:"production"`
+	SupportCenter    string             `json:"support_center"`
+	GroupDescription string             `json:"group_description"`
+	Contacts         []db.EntityContact `json:"contacts"`
 }
 
 func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Proposal, actorID string) error {
@@ -381,18 +382,23 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Prop
 	}
 	// Update in place (preserving child resources); create when new.
 	if p.Operation == models.OpUpdate {
-		return h.queries.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription)
+		if err := h.queries.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
+			return err
+		}
+	} else {
+		prod := true
+		if rp.Production != nil {
+			prod = *rp.Production
+		}
+		if _, err := h.queries.InsertResourceGroup(ctx, db.ResourceGroupRow{
+			GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
+			Production: &prod, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
+			IDExplicit: false,
+		}); err != nil {
+			return err
+		}
 	}
-	prod := true
-	if rp.Production != nil {
-		prod = *rp.Production
-	}
-	_, err = h.queries.InsertResourceGroup(ctx, db.ResourceGroupRow{
-		GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
-		Production: &prod, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
-		IDExplicit: false,
-	})
-	return err
+	return h.queries.ReplaceEntityContacts(ctx, models.KindResourceGroup, rp.Name, rp.Contacts, actorID)
 }
 
 type siteProposal struct {
@@ -406,8 +412,9 @@ type siteProposal struct {
 	State        string   `json:"state"`
 	Country      string   `json:"country"`
 	Zipcode      string   `json:"zipcode"`
-	Latitude     *float64 `json:"latitude"`
-	Longitude    *float64 `json:"longitude"`
+	Latitude     *float64           `json:"latitude"`
+	Longitude    *float64           `json:"longitude"`
+	Contacts     []db.EntityContact `json:"contacts"`
 }
 
 func (h *Handler) applySiteProposal(ctx context.Context, p *models.Proposal, actorID string) error {
@@ -429,17 +436,23 @@ func (h *Handler) applySiteProposal(ctx context.Context, p *models.Proposal, act
 		Latitude: sp.Latitude, Longitude: sp.Longitude,
 	}
 	if p.Operation == models.OpUpdate {
-		return h.queries.UpdateSiteFields(ctx, row)
+		if err := h.queries.UpdateSiteFields(ctx, row); err != nil {
+			return err
+		}
+	} else {
+		row.TopologyID = topology.GenID(sp.Name)
+		row.IDExplicit = false
+		if _, err := h.queries.InsertSite(ctx, row); err != nil {
+			return err
+		}
 	}
-	row.TopologyID = topology.GenID(sp.Name)
-	row.IDExplicit = false
-	_, err = h.queries.InsertSite(ctx, row)
-	return err
+	return h.queries.ReplaceEntityContacts(ctx, models.KindSite, sp.Name, sp.Contacts, actorID)
 }
 
 type facilityProposal struct {
-	Name          string `json:"name"`
-	InstitutionID string `json:"institution_id"`
+	Name          string             `json:"name"`
+	InstitutionID string             `json:"institution_id"`
+	Contacts      []db.EntityContact `json:"contacts"`
 }
 
 func (h *Handler) applyFacilityProposal(ctx context.Context, p *models.Proposal, actorID string) error {
@@ -451,13 +464,18 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, p *models.Proposal,
 		return err
 	}
 	if p.Operation == models.OpUpdate {
-		return h.queries.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID)
+		if err := h.queries.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID); err != nil {
+			return err
+		}
+	} else {
+		if _, err := h.queries.InsertFacility(ctx, db.FacilityRow{
+			TopologyID: topology.GenID(fp.Name), Name: fp.Name,
+			InstitutionID: fp.InstitutionID, IDExplicit: false,
+		}); err != nil {
+			return err
+		}
 	}
-	_, err := h.queries.InsertFacility(ctx, db.FacilityRow{
-		TopologyID: topology.GenID(fp.Name), Name: fp.Name,
-		InstitutionID: fp.InstitutionID, IDExplicit: false,
-	})
-	return err
+	return h.queries.ReplaceEntityContacts(ctx, models.KindFacility, fp.Name, fp.Contacts, actorID)
 }
 
 // orEmptyJSON returns b, or an empty JSON object if b is empty.

@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewRGForm() {
   const router = useRouter();
@@ -15,6 +16,7 @@ function NewRGForm() {
   const [production, setProduction] = useState(true);
   const [supportCenter, setSupportCenter] = useState("");
   const [description, setDescription] = useState("");
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -31,6 +33,7 @@ function NewRGForm() {
     setProduction(editData.production !== false);
     setSupportCenter(editData.support_center);
     setDescription(editData.group_description);
+    setContacts(fromEntityContacts(editData.contacts));
   }, [editData]);
 
   const submit = async (asDraft: boolean) => {
@@ -48,6 +51,7 @@ function NewRGForm() {
           production,
           support_center: supportCenter,
           group_description: description,
+          contacts: toEntityContacts(contacts),
         },
       });
       // If launched as a popout (?return=resource), send the user back to the
@@ -114,17 +118,22 @@ function NewRGForm() {
             />
             Production (vs ITB)
           </label>
-          {err && <p className="text-sm text-red-600">{err}</p>}
-          <div className="flex gap-3 pt-2">
-            <button className={btn} disabled={busy || !name || !site} onClick={() => submit(false)}>
-              Submit for review
-            </button>
-            <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>
-              Save draft
-            </button>
-          </div>
         </div>
       </Card>
+
+      <div className="mt-6">
+        <EntityContactsEditor rows={contacts} onChange={setContacts} />
+      </div>
+
+      {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+      <div className="mt-4 flex gap-3">
+        <button className={btn} disabled={busy || !name || !site} onClick={() => submit(false)}>
+          Submit for review
+        </button>
+        <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>
+          Save draft
+        </button>
+      </div>
     </div>
   );
 }

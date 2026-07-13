@@ -190,9 +190,9 @@ func (q *Queries) ListAllSupportCenters(ctx context.Context) ([]SupportCenterFul
 
 // TruncateTopology clears all topology-domain tables (used before a restore).
 func (q *Queries) TruncateTopology(ctx context.Context) error {
-	_, err := q.pool.Exec(ctx, `TRUNCATE downtimes, resource_contacts, resource_services,
-		resources, resource_groups, sites, facilities, services, support_centers,
-		vos, projects CASCADE`)
+	_, err := q.pool.Exec(ctx, `TRUNCATE downtimes, resource_contacts, entity_contacts,
+		resource_services, resources, resource_groups, sites, facilities, services,
+		support_centers, vos, projects CASCADE`)
 	return err
 }
 
