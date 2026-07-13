@@ -305,10 +305,19 @@ func (h *Handler) linkIdentity(ctx context.Context, userID string, p onboardPara
 	return nil
 }
 
-// loginUser stamps last-login, snapshots the effective role, and sets the
-// session cookie.
+// loginUser stamps last-login, ensures a username, snapshots the effective
+// role, and sets the session cookie.
 func (h *Handler) loginUser(ctx context.Context, w http.ResponseWriter, userID string) {
 	_ = h.queries.UpdateUserLastLogin(ctx, userID)
+	// Derive a unique username at first login (idempotent thereafter). Base it on
+	// the user's display name (a proxy for the preferred_username claim).
+	if u, err := h.queries.GetUser(ctx, userID); err == nil {
+		base := u.DisplayName
+		if base == "" {
+			base = "user"
+		}
+		_, _ = h.queries.EnsureUsername(ctx, userID, base)
+	}
 	roles, _ := h.queries.GetUserRoles(ctx, userID)
 	if len(roles) == 0 {
 		_ = h.queries.AddUserRole(ctx, userID, models.RoleUser)

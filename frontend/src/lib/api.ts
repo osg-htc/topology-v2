@@ -187,6 +187,8 @@ export const api = {
       }),
   },
   audit: () => fetchJSON<AuditEntry[]>("/audit"),
+  userLabels: (ids: string[]) =>
+    fetchJSON<UserLabelT[]>(`/user-labels?ids=${encodeURIComponent(ids.join(","))}`),
   admin: {
     syncInstitutions: () =>
       fetchJSON<{ synced: number }>("/admin/institutions/sync", { method: "POST" }),
@@ -203,6 +205,11 @@ export const api = {
       fetchJSON<{ status: string }>(`/admin/users/${id}/roles`, {
         method: "POST",
         body: JSON.stringify({ role, action }),
+      }),
+    setUsername: (id: string, username: string) =>
+      fetchJSON<{ status: string }>(`/admin/users/${id}/username`, {
+        method: "POST",
+        body: JSON.stringify({ username }),
       }),
     listBackups: () => fetchJSON<{ backups: string[] }>("/admin/backups"),
     createBackup: () => fetchJSON<{ key: string; size: number }>("/admin/backup", { method: "POST" }),
@@ -375,6 +382,12 @@ export interface OIDCConfig {
   has_secret: boolean;
 }
 
+export interface UserLabelT {
+  id: string;
+  display_name: string;
+  username: string;
+}
+
 export interface UserSearchResult {
   id: string;
   display_name: string;
@@ -385,6 +398,7 @@ export interface UserSearchResult {
 export interface AdminUser {
   id: string;
   display_name: string;
+  username?: string;
   status: string;
   is_provisioned: boolean;
   roles?: string[];

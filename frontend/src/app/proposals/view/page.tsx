@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, StatusBadge, btn, btnSecondary, input } from "@/components/ui";
 import { StructuredView } from "@/components/StructuredView";
+import { UserLabel } from "@/components/UserLabel";
 
 // editFormHref maps a proposal to the structured form that can edit it, passing
 // enough context to prefill. Only resource groups currently prefill (via name).
@@ -106,7 +107,7 @@ function ProposalView() {
                 {p.revisions.map((r) => (
                   <li key={r.revision_no} className="flex justify-between">
                     <span>
-                      #{r.revision_no} by {r.edited_by.slice(0, 8)}
+                      #{r.revision_no} by <UserLabel id={r.edited_by} />
                       {r.note ? ` — ${r.note}` : ""}
                     </span>
                     <span>{new Date(r.created_at).toLocaleString()}</span>

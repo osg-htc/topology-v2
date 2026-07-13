@@ -134,6 +134,26 @@ func (h *Handler) SearchUsersHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, out)
 }
 
+type setUsernameRequest struct {
+	Username string `json:"username"`
+}
+
+// SetUsernameHandler lets an administrator change a user's username.
+func (h *Handler) SetUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	var req setUsernameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.queries.SetUsername(r.Context(), userID, req.Username); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.audit(r.Context(), h.currentUser(r).ID, "user.set_username", "user", userID, "", nil)
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 type roleChangeRequest struct {
 	Role   string `json:"role"`
 	Action string `json:"action"` // add | remove

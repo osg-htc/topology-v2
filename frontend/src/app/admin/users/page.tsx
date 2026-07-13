@@ -19,6 +19,11 @@ export default function AdminUsersPage() {
       api.admin.setUserRole(v.id, v.role, v.action),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
   });
+  const setUsername = useMutation({
+    mutationFn: (v: { id: string; username: string }) => api.admin.setUsername(v.id, v.username),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
+    onError: (e) => alert(String(e)),
+  });
 
   if (error) {
     return (
@@ -44,11 +49,24 @@ export default function AdminUsersPage() {
                 <div>
                   <div className="font-medium text-navy-900">
                     {u.display_name || "(no name)"}
+                    {u.username && <span className="ml-1 text-sm text-gray-400">({u.username})</span>}
                     {u.is_provisioned && (
                       <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
                         provisioned
                       </span>
                     )}
+                    <button
+                      className="ml-2 text-xs text-brand-600 hover:underline"
+                      onClick={() => {
+                        const v = prompt(`Set username for ${u.display_name}`, u.username || "");
+                        if (v && v !== u.username) setUsername.mutate({ id: u.id, username: v });
+                      }}
+                    >
+                      edit username
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-300" title={u.id}>
+                    id: {u.id}
                   </div>
                   <div className="mt-1 space-y-0.5 text-xs text-gray-500">
                     {(u.identities ?? []).length === 0 && <div>no linked identities</div>}

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
+import { UserLabel } from "@/components/UserLabel";
 
 export default function AuditPage() {
   const { data, isLoading, error } = useQuery({
@@ -37,7 +38,9 @@ export default function AuditPage() {
                   <td className="px-4 py-2 text-gray-500">
                     {new Date(e.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2 text-gray-500">{(e.actor_user_id ?? "").slice(0, 8)}</td>
+                  <td className="px-4 py-2 text-gray-500">
+                    {e.actor_user_id ? <UserLabel id={e.actor_user_id} /> : "system"}
+                  </td>
                   <td className="px-4 py-2 font-medium text-navy-900">{e.action}</td>
                   <td className="px-4 py-2 text-gray-500">
                     {e.entity_kind}

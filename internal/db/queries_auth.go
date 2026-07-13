@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,12 +46,12 @@ func (q *Queries) CreateUser(ctx context.Context, p CreateUserParams) (string, e
 // GetUser fetches a user by id.
 func (q *Queries) GetUser(ctx context.Context, id string) (*models.User, error) {
 	u := &models.User{}
-	var legacy *string
+	var legacy, username *string
 	err := q.pool.QueryRow(ctx,
-		`SELECT id, display_name, status, legacy_contact_id, is_provisioned,
+		`SELECT id, display_name, username, status, legacy_contact_id, is_provisioned,
 		        last_login, created_at, updated_at
 		 FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.DisplayName, &u.Status, &legacy, &u.IsProvisioned,
+		Scan(&u.ID, &u.DisplayName, &username, &u.Status, &legacy, &u.IsProvisioned,
 			&u.LastLogin, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -57,10 +59,81 @@ func (q *Queries) GetUser(ctx context.Context, id string) (*models.User, error) 
 	if err != nil {
 		return nil, err
 	}
-	if legacy != nil {
-		u.LegacyContactID = *legacy
-	}
+	u.LegacyContactID = deref(legacy)
+	u.Username = deref(username)
 	return u, nil
+}
+
+// EnsureUsername sets a unique username on a user if it has none, deriving it
+// from base (e.g. the OIDC preferred_username) with a numeric suffix on
+// collision. Returns the user's username.
+func (q *Queries) EnsureUsername(ctx context.Context, userID, base string) (string, error) {
+	var existing *string
+	if err := q.pool.QueryRow(ctx, `SELECT username FROM users WHERE id = $1`, userID).Scan(&existing); err != nil {
+		return "", err
+	}
+	if existing != nil && *existing != "" {
+		return *existing, nil
+	}
+	clean := SanitizeUsername(base)
+	if clean == "" {
+		clean = "user"
+	}
+	for i := 0; i < 200; i++ {
+		cand := clean
+		if i > 0 {
+			cand = fmt.Sprintf("%s-%d", clean, i+1)
+		}
+		tag, err := q.pool.Exec(ctx,
+			`UPDATE users SET username = $2, updated_at = NOW()
+			 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM users WHERE username = $2)`,
+			userID, cand)
+		if err != nil {
+			return "", err
+		}
+		if tag.RowsAffected() == 1 {
+			return cand, nil
+		}
+	}
+	return "", errors.New("could not allocate a unique username")
+}
+
+// SetUsername lets an administrator change a user's username (must be unique).
+func (q *Queries) SetUsername(ctx context.Context, userID, username string) error {
+	clean := SanitizeUsername(username)
+	if clean == "" {
+		return errors.New("invalid username")
+	}
+	tag, err := q.pool.Exec(ctx,
+		`UPDATE users SET username = $2, updated_at = NOW()
+		 WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM users WHERE username = $2 AND id <> $1)`,
+		userID, clean)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return errors.New("username already taken")
+	}
+	return nil
+}
+
+// SanitizeUsername lowercases and strips a base string to [a-z0-9._-].
+func SanitizeUsername(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	// Prefer the local part if an email was passed.
+	if at := strings.IndexByte(s, '@'); at > 0 {
+		s = s[:at]
+	}
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), ".-_")
 }
 
 // UpdateUserLastLogin stamps last_login and marks the account claimed.
@@ -140,10 +213,11 @@ func (q *Queries) SearchUsers(ctx context.Context, query string, limit int) ([]*
 		limit = 25
 	}
 	rows, err := q.pool.Query(ctx,
-		`SELECT id, display_name, status, legacy_contact_id, is_provisioned,
+		`SELECT id, display_name, username, status, legacy_contact_id, is_provisioned,
 		        last_login, created_at, updated_at
 		 FROM users
 		 WHERE display_name ILIKE '%'||$1||'%' OR legacy_contact_id ILIKE '%'||$1||'%'
+		    OR username ILIKE '%'||$1||'%'
 		 ORDER BY display_name LIMIT $2`, query, limit)
 	if err != nil {
 		return nil, err
@@ -152,12 +226,13 @@ func (q *Queries) SearchUsers(ctx context.Context, query string, limit int) ([]*
 	var out []*models.User
 	for rows.Next() {
 		u := &models.User{}
-		var legacy *string
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Status, &legacy, &u.IsProvisioned,
+		var legacy, username *string
+		if err := rows.Scan(&u.ID, &u.DisplayName, &username, &u.Status, &legacy, &u.IsProvisioned,
 			&u.LastLogin, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		u.LegacyContactID = deref(legacy)
+		u.Username = deref(username)
 		out = append(out, u)
 	}
 	return out, rows.Err()
@@ -166,7 +241,7 @@ func (q *Queries) SearchUsers(ctx context.Context, query string, limit int) ([]*
 // ListAllUsers returns all user accounts, newest first (admin user management).
 func (q *Queries) ListAllUsers(ctx context.Context) ([]*models.User, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT id, display_name, status, legacy_contact_id, is_provisioned,
+		`SELECT id, display_name, username, status, legacy_contact_id, is_provisioned,
 		        last_login, created_at, updated_at
 		 FROM users ORDER BY created_at DESC`)
 	if err != nil {
@@ -176,13 +251,40 @@ func (q *Queries) ListAllUsers(ctx context.Context) ([]*models.User, error) {
 	var out []*models.User
 	for rows.Next() {
 		u := &models.User{}
-		var legacy *string
-		if err := rows.Scan(&u.ID, &u.DisplayName, &u.Status, &legacy, &u.IsProvisioned,
+		var legacy, username *string
+		if err := rows.Scan(&u.ID, &u.DisplayName, &username, &u.Status, &legacy, &u.IsProvisioned,
 			&u.LastLogin, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		u.LegacyContactID = deref(legacy)
+		u.Username = deref(username)
 		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UserLabel is the lightweight actor-display for "Display name (username)".
+type UserLabel struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Username    string `json:"username"`
+}
+
+// UserLabels returns display labels for a set of user ids (for showing actors).
+func (q *Queries) UserLabels(ctx context.Context, ids []string) ([]UserLabel, error) {
+	rows, err := q.pool.Query(ctx,
+		`SELECT id, display_name, COALESCE(username,'') FROM users WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]UserLabel, 0, len(ids))
+	for rows.Next() {
+		var l UserLabel
+		if err := rows.Scan(&l.ID, &l.DisplayName, &l.Username); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
 	}
 	return out, rows.Err()
 }

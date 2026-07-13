@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -168,6 +169,24 @@ func downtimeJSON(d db.DowntimeRow) map[string]any {
 		"start_time": d.StartTime, "end_time": d.EndTime, "created_time": d.CreatedTime,
 		"services": strOrEmpty(d.Services),
 	}
+}
+
+// UserLabelsHandler returns display labels ("Display name (username)") for a
+// comma-separated set of user ids, so actors can be shown wherever a change was
+// made by someone.
+func (h *Handler) UserLabelsHandler(w http.ResponseWriter, r *http.Request) {
+	idsParam := r.URL.Query().Get("ids")
+	if idsParam == "" {
+		respondJSON(w, http.StatusOK, []any{})
+		return
+	}
+	ids := strings.Split(idsParam, ",")
+	labels, err := h.queries.UserLabels(r.Context(), ids)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, labels)
 }
 
 // ListInstitutionsHandler returns cached institutions.

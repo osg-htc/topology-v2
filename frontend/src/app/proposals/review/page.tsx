@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { PageHeader, Card, StatusBadge } from "@/components/ui";
+import { UserLabel } from "@/components/UserLabel";
 
 export default function ReviewQueuePage() {
   const { data, isLoading, error } = useQuery({
@@ -44,7 +45,7 @@ export default function ReviewQueuePage() {
                 </span>
                 {p.target_name && <span className="ml-2 text-sm text-gray-500">{p.target_name}</span>}
                 <div className="text-xs text-gray-400">
-                  submitted {new Date(p.updated_at).toLocaleString()} · by {p.created_by.slice(0, 8)}
+                  submitted {new Date(p.updated_at).toLocaleString()} · by <UserLabel id={p.created_by} />
                 </div>
               </div>
               <StatusBadge status={p.status} />

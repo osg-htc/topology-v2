@@ -115,6 +115,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Group(func(r chi.Router) {
 			r.Use(h.RequireAuth)
 			r.Get("/dashboard", h.DashboardHandler)
+			r.Get("/user-labels", h.UserLabelsHandler)
 
 			r.Route("/proposals", func(r chi.Router) {
 				r.Post("/", h.CreateProposal)
@@ -145,6 +146,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 				r.Get("/users", h.ListUsersHandler)
 				r.Get("/users/search", h.SearchUsersHandler)
 				r.Post("/users/{id}/roles", h.SetUserRoleHandler)
+				r.Post("/users/{id}/username", h.SetUsernameHandler)
 			})
 		})
 	})

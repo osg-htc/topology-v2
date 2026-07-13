@@ -52,6 +52,7 @@ func EffectiveRole(roles []string) string {
 type User struct {
 	ID              string    `json:"id"`
 	DisplayName     string    `json:"display_name"`
+	Username        string    `json:"username,omitempty"`
 	Status          string    `json:"status"`
 	LegacyContactID string    `json:"legacy_contact_id,omitempty"`
 	IsProvisioned   bool      `json:"is_provisioned"`

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Card, PageHeader, StatusBadge, LinkButton } from "@/components/ui";
+import { UserLabel } from "@/components/UserLabel";
 
 export default function DashboardPage() {
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
@@ -135,7 +136,11 @@ function ProposalList({
             {p.target_name && <span className="ml-2 text-sm text-gray-500">{p.target_name}</span>}
           </div>
           <div className="flex items-center gap-3">
-            {review && <span className="text-xs text-gray-400">by {p.created_by.slice(0, 8)}</span>}
+            {review && (
+              <span className="text-xs text-gray-400">
+                by <UserLabel id={p.created_by} />
+              </span>
+            )}
             <StatusBadge status={p.status} />
           </div>
         </Link>
