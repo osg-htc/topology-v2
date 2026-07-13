@@ -23,17 +23,32 @@ func NewSPAHandler() http.Handler {
 		if reqPath == "" {
 			reqPath = "index.html"
 		}
-		if _, err := fs.Stat(dist, reqPath); err != nil {
-			// Not a real file: resolve Next.js dynamic-route [id] exports, else
-			// fall back to index.html so the client router can take over.
-			if resolved, ok := resolveDynamic(dist, reqPath); ok {
-				r.URL.Path = "/" + resolved
-			} else {
-				r.URL.Path = "/index.html"
+		info, err := fs.Stat(dist, reqPath)
+		if err != nil || info.IsDir() {
+			// Not a servable file. A route like "/proposals" matches the
+			// "proposals/" directory (it also has child pages); prefer the
+			// exported page "proposals.html" over a directory listing. Then try
+			// Next.js dynamic-route [id] exports, else fall back to index.html so
+			// the client router can take over.
+			switch {
+			case fileExists(dist, reqPath+".html"):
+				r.URL.Path = "/" + reqPath + ".html"
+			default:
+				if resolved, ok := resolveDynamic(dist, reqPath); ok {
+					r.URL.Path = "/" + resolved
+				} else {
+					r.URL.Path = "/index.html"
+				}
 			}
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// fileExists reports whether name is a regular (non-directory) file in dist.
+func fileExists(dist fs.FS, name string) bool {
+	info, err := fs.Stat(dist, name)
+	return err == nil && !info.IsDir()
 }
 
 // resolveDynamic maps a concrete path like "projects/abc" to a Next.js exported

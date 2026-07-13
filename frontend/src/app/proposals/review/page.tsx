@@ -1,10 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { api } from "@/lib/api";
-import { PageHeader, Card, StatusBadge } from "@/components/ui";
-import { UserLabel } from "@/components/UserLabel";
+import { PageHeader, Card } from "@/components/ui";
+import { ProposalRow, proposalMeta } from "@/components/ProposalRow";
 
 export default function ReviewQueuePage() {
   const { data, isLoading, error } = useQuery({
@@ -34,22 +33,7 @@ export default function ReviewQueuePage() {
       ) : (
         <div className="space-y-2">
           {data.map((p) => (
-            <Link
-              key={p.id}
-              href={`/proposals/view?id=${p.id}`}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 hover:border-brand-400"
-            >
-              <div>
-                <span className="font-medium text-navy-900">
-                  {p.operation} {p.entity_kind}
-                </span>
-                {p.target_name && <span className="ml-2 text-sm text-gray-500">{p.target_name}</span>}
-                <div className="text-xs text-gray-400">
-                  submitted {new Date(p.updated_at).toLocaleString()} · by <UserLabel id={p.created_by} />
-                </div>
-              </div>
-              <StatusBadge status={p.status} />
-            </Link>
+            <ProposalRow key={p.id} p={p} meta={proposalMeta(p, "submitted")} />
           ))}
         </div>
       )}

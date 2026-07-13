@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { PageHeader, Card, StatusBadge, btn, btnSecondary, input } from "@/components/ui";
 import { StructuredView } from "@/components/StructuredView";
 import { UserLabel } from "@/components/UserLabel";
+import { proposalSummary, kindLabel } from "@/lib/proposalSummary";
 
 // editFormHref maps a proposal to the structured form that can edit it, passing
 // enough context to prefill. Only resource groups currently prefill (via name).
@@ -70,10 +71,13 @@ function ProposalView() {
   // Route "edit in form" to the matching structured create/edit form.
   const editHref = editFormHref(p.entity_kind, p.proposed_state);
 
+  const summary = proposalSummary(p);
+
   return (
     <div className="p-8">
       <PageHeader
-        title={`${p.operation} ${p.entity_kind}`}
+        title={`${p.operation} ${kindLabel(p.entity_kind).toLowerCase()}: ${summary.title}`}
+        description={summary.changes.join(" · ")}
         action={<StatusBadge status={p.status} />}
       />
 
