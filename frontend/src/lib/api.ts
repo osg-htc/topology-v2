@@ -139,7 +139,13 @@ export const api = {
     fetchJSON<Site[]>(`/sites${includeInactive ? "?include_inactive=1" : ""}`),
   facilities: (includeInactive = false) =>
     fetchJSON<Facility[]>(`/facilities${includeInactive ? "?include_inactive=1" : ""}`),
-  institutions: () => fetchJSON<Institution[]>("/institutions"),
+  institutions: (q?: string) =>
+    fetchJSON<Institution[]>(`/institutions${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  refreshInstitutions: () =>
+    fetchJSON<{ synced?: number; throttled?: boolean; retry_after_seconds?: number }>(
+      "/institutions/refresh",
+      { method: "POST" },
+    ),
   downtimes: (filter?: { resource?: string; rg?: string }) => {
     const p = new URLSearchParams();
     if (filter?.resource) p.set("resource", filter.resource);

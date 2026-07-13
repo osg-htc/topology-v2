@@ -14,7 +14,7 @@ export default function InstitutionsPage() {
   const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
   const isAdmin = session?.effective_role === "administrator";
 
-  const { data, isLoading } = useQuery({ queryKey: ["institutions"], queryFn: api.institutions });
+  const { data, isLoading } = useQuery({ queryKey: ["institutions"], queryFn: () => api.institutions() });
 
   const sync = useMutation({
     mutationFn: api.admin.syncInstitutions,

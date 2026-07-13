@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
-import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, pendingInviteIds, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewSiteForm() {
   const router = useRouter();
@@ -73,6 +73,7 @@ function NewSiteForm() {
         target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: proposed,
+        pending_invite_ids: pendingInviteIds(contacts),
       });
       router.push(`/proposals/view?id=${res.id}`);
     } catch (e) {

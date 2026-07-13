@@ -435,6 +435,39 @@ func (q *Queries) ListInstitutions(ctx context.Context) ([]Institution, error) {
 	return out, rows.Err()
 }
 
+// SearchInstitutions returns cached institutions whose name matches q (all when
+// q is empty), capped at limit. Backs the facility institution picker.
+func (q *Queries) SearchInstitutions(ctx context.Context, query string, limit int) ([]Institution, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := q.pool.Query(ctx,
+		`SELECT iid_uri, name, COALESCE(ror_id,'') FROM institutions
+		 WHERE $1 = '' OR name ILIKE '%' || $1 || '%'
+		 ORDER BY name LIMIT $2`, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Institution, 0)
+	for rows.Next() {
+		var i Institution
+		if err := rows.Scan(&i.IIDURI, &i.Name, &i.RORID); err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+
+// InstitutionExists reports whether an institution id is in the cache.
+func (q *Queries) InstitutionExists(ctx context.Context, iid string) (bool, error) {
+	var ok bool
+	err := q.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM institutions WHERE iid_uri = $1)`, iid).Scan(&ok)
+	return ok, err
+}
+
 // UpsertInstitution caches an institution (aggressive cache: ids are immutable).
 func (q *Queries) UpsertInstitution(ctx context.Context, iidURI, name, rorID string) error {
 	_, err := q.pool.Exec(ctx,

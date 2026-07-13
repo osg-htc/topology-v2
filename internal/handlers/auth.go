@@ -244,8 +244,9 @@ func (h *Handler) onboardIdentity(ctx context.Context, w http.ResponseWriter, r 
 		}
 	}
 
-	// account_link invite → attach identity to the pre-provisioned target.
-	if inv != nil && inv.Kind == models.InviteAccountLink && inv.TargetUserID != "" {
+	// account_link / contact_onboard invite → attach identity to the
+	// pre-provisioned target account.
+	if inv != nil && (inv.Kind == models.InviteAccountLink || inv.Kind == models.InviteContactOnboard) && inv.TargetUserID != "" {
 		if err := h.linkIdentity(ctx, inv.TargetUserID, p); err != nil {
 			return "", err
 		}
@@ -425,6 +426,7 @@ type devLoginRequest struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 	Role        string `json:"role"`
+	Invite      string `json:"invite"` // optional onboarding/account-link token
 }
 
 // DevLogin issues a session without OIDC. Only available in development.
@@ -455,12 +457,22 @@ func (h *Handler) DevLogin(w http.ResponseWriter, r *http.Request) {
 	if existing, err := h.queries.FindIdentity(ctx, issuer, subject); err == nil {
 		userID = existing.UserID
 	} else {
-		userID, err = h.queries.CreateUser(ctx, db.CreateUserParams{DisplayName: req.DisplayName, Status: "active"})
-		if err != nil {
-			respondError(w, http.StatusInternalServerError, "creating user")
-			return
+		p := onboardParams{Issuer: issuer, Subject: subject, Email: req.Email, Name: req.DisplayName, InviteToken: req.Invite}
+		// Honor an onboarding/account-link invite so contact onboarding works
+		// under dev auth (mirrors the OIDC login path).
+		if req.Invite != "" {
+			if uid, err := h.onboardIdentity(ctx, w, r, p); err == nil && uid != "" {
+				userID = uid
+			}
 		}
-		_ = h.linkIdentity(ctx, userID, onboardParams{Issuer: issuer, Subject: subject, Email: req.Email, Name: req.DisplayName})
+		if userID == "" {
+			userID, err = h.queries.CreateUser(ctx, db.CreateUserParams{DisplayName: req.DisplayName, Status: "active"})
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, "creating user")
+				return
+			}
+			_ = h.linkIdentity(ctx, userID, p)
+		}
 	}
 	_ = h.queries.AddUserRole(ctx, userID, role)
 	h.loginUser(ctx, w, userID)

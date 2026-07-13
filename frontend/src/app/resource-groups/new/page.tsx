@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
-import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, pendingInviteIds, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewRGForm() {
   const router = useRouter();
@@ -53,6 +53,7 @@ function NewRGForm() {
           group_description: description,
           contacts: toEntityContacts(contacts),
         },
+        pending_invite_ids: pendingInviteIds(contacts),
       });
       // If launched as a popout (?return=resource), send the user back to the
       // resource form with this RG preselected.

@@ -2,7 +2,21 @@ package db
 
 import "context"
 
-// EntityContact is a contact on a resource group / site / facility.
+// ranksByOrder maps a contact's 0-based position within its type to a rank.
+// The UI only exposes ordering (reorder arrows); rank is derived here so the
+// backend is the single source of truth for Primary/Secondary/Tertiary.
+var ranksByOrder = []string{"Primary", "Secondary", "Tertiary"}
+
+func rankForOrder(n int) string {
+	if n >= len(ranksByOrder) {
+		return ranksByOrder[len(ranksByOrder)-1]
+	}
+	return ranksByOrder[n]
+}
+
+// EntityContact is a contact on a resource group / site / facility. Rank is
+// derived from list order at apply time (see ReplaceEntityContacts); callers
+// supply contacts already in the desired order and may leave Rank empty.
 type EntityContact struct {
 	ContactType string `json:"contact_type"`
 	Rank        string `json:"rank"`
@@ -20,15 +34,19 @@ func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, name string, 
 		kind, name, nullString(byUser)); err != nil {
 		return err
 	}
+	// Derive rank from order within each contact type (1st = Primary, …).
+	perType := map[string]int{}
 	for _, c := range contacts {
 		if c.Name == "" && c.ID == "" {
 			continue
 		}
+		rank := rankForOrder(perType[c.ContactType])
+		perType[c.ContactType]++
 		userID, _ := q.UpsertProvisionedContactUser(ctx, c.Name, c.ID)
 		if _, err := q.pool.Exec(ctx,
 			`INSERT INTO entity_contacts (entity_kind, entity_name, contact_type, rank, contact_name, contact_id, user_id)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			kind, name, c.ContactType, c.Rank, nullString(c.Name), nullString(c.ID), nullString(userID)); err != nil {
+			kind, name, c.ContactType, rank, nullString(c.Name), nullString(c.ID), nullString(userID)); err != nil {
 			return err
 		}
 	}

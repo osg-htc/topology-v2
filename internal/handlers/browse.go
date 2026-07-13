@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -189,14 +190,54 @@ func (h *Handler) UserLabelsHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, labels)
 }
 
-// ListInstitutionsHandler returns cached institutions.
+// ListInstitutionsHandler returns cached institutions, optionally filtered by a
+// ?q= name substring (used by the facility institution picker).
 func (h *Handler) ListInstitutionsHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.ListInstitutions(r.Context())
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	var (
+		rows any
+		err  error
+	)
+	if q != "" {
+		rows, err = h.queries.SearchInstitutions(r.Context(), q, 50)
+	} else {
+		rows, err = h.queries.ListInstitutions(r.Context())
+	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	respondJSON(w, http.StatusOK, rows)
+}
+
+// lastInstitutionRefresh throttles user-triggered registry refreshes.
+var (
+	lastInstitutionRefresh   time.Time
+	institutionRefreshMu     sync.Mutex
+	institutionRefreshWindow = 5 * time.Minute
+)
+
+// RefreshInstitutionsHandler lets any authenticated user pull newly-registered
+// institutions from the registry, rate-limited so a missing-name lookup can't
+// hammer the upstream. Soft failure: the cache stays authoritative.
+func (h *Handler) RefreshInstitutionsHandler(w http.ResponseWriter, r *http.Request) {
+	institutionRefreshMu.Lock()
+	since := time.Since(lastInstitutionRefresh)
+	if since < institutionRefreshWindow {
+		wait := int((institutionRefreshWindow - since).Seconds())
+		institutionRefreshMu.Unlock()
+		respondJSON(w, http.StatusOK, map[string]any{"throttled": true, "retry_after_seconds": wait})
+		return
+	}
+	lastInstitutionRefresh = time.Now()
+	institutionRefreshMu.Unlock()
+
+	n, err := h.syncInstitutions(r.Context())
+	if err != nil {
+		respondError(w, http.StatusBadGateway, "institutions registry unavailable: "+err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{"synced": n})
 }
 
 // SyncInstitutionsHandler refreshes the institution cache from the external

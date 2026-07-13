@@ -5,17 +5,19 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
-import { EntityContactsEditor, fromEntityContacts, toEntityContacts, ContactRow } from "@/components/EntityContactsEditor";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, pendingInviteIds, ContactRow } from "@/components/EntityContactsEditor";
+import { InstitutionPicker } from "@/components/InstitutionPicker";
 
 function NewFacilityForm() {
   const router = useRouter();
   const editName = useSearchParams().get("edit");
   const [name, setName] = useState(editName ?? "");
   const [institutionID, setInstitutionID] = useState("");
+  const [institutionValid, setInstitutionValid] = useState(false);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [err, setErr] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
-  const { data: institutions } = useQuery({ queryKey: ["institutions"], queryFn: api.institutions });
   const { data: editData } = useQuery({
     queryKey: ["facility-detail", editName],
     queryFn: () => api.facilityDetail(editName!),
@@ -25,11 +27,17 @@ function NewFacilityForm() {
     if (!editData) return;
     setName(editData.name);
     setInstitutionID(editData.institution_id);
+    setInstitutionValid(!!editData.institution_id);
     setContacts(fromEntityContacts(editData.contacts));
   }, [editData]);
 
   const submit = async (asDraft: boolean) => {
     setErr("");
+    if (!asDraft && !institutionValid) {
+      setShowErrors(true);
+      setErr("Pick an institution from the registry.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await api.proposals.create({
@@ -38,6 +46,7 @@ function NewFacilityForm() {
         target_name: editName ?? undefined,
         submit: !asDraft,
         proposed_state: { name, institution_id: institutionID, contacts: toEntityContacts(contacts) },
+        pending_invite_ids: pendingInviteIds(contacts),
       });
       router.push(`/proposals/view?id=${res.id}`);
     } catch (e) {
@@ -56,26 +65,15 @@ function NewFacilityForm() {
             <label className={label}>Name</label>
             <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div>
-            <label className={label}>Institution</label>
-            <input
-              className={input}
-              list="inst-options"
-              value={institutionID}
-              onChange={(e) => setInstitutionID(e.target.value)}
-              placeholder="OSG IID (or pick a name)…"
-            />
-            <datalist id="inst-options">
-              {(institutions ?? []).map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </datalist>
-            <p className="mt-1 text-xs text-gray-400">
-              Institutions come from the registry (Institutions page → Sync).
-            </p>
-          </div>
+          <InstitutionPicker
+            value={institutionID}
+            initialName={editData?.institution_id}
+            invalid={showErrors && !institutionValid}
+            onResolve={(iid, valid) => {
+              setInstitutionID(iid);
+              setInstitutionValid(valid);
+            }}
+          />
         </div>
       </Card>
       <div className="mt-6 max-w-xl">

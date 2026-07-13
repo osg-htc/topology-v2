@@ -111,6 +111,7 @@ const (
 	InviteAccountLink        = "account_link"
 	InviteRoleClaim          = "role_claim"
 	InviteReplacementRequest = "replacement_request"
+	InviteContactOnboard     = "contact_onboard"
 )
 
 // RoleClaim describes a responsibility offered by a role_claim invite, e.g.

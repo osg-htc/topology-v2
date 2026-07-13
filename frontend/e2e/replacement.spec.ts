@@ -10,6 +10,11 @@ test("propose-self replacement is approved by the incumbent", async ({ page, bro
   const site = `RepSite_${ts}`;
   const rg = `RepRG_${ts}`;
 
+  // A facility now requires a real institution from the registry.
+  const insts = await (await page.request.get("/api/v1/institutions?q=a")).json();
+  test.skip(!insts || insts.length === 0, "needs cached institutions (admin → Sync)");
+  const iid: string = insts[0].id;
+
   // Create a fresh resource group via an atomic bundle so the slot starts clean.
   const bundle = await page.request.post("/api/v1/proposals", {
     data: {
@@ -18,7 +23,7 @@ test("propose-self replacement is approved by the incumbent", async ({ page, bro
       submit: true,
       proposed_state: {
         operations: [
-          { entity_kind: "facility", operation: "create", proposed_state: { name: fac, institution_id: "" } },
+          { entity_kind: "facility", operation: "create", proposed_state: { name: fac, institution_id: iid } },
           { entity_kind: "site", operation: "create", proposed_state: { name: site, facility: fac, long_name: site } },
           { entity_kind: "resource_group", operation: "create", proposed_state: { name: rg, site } },
         ],

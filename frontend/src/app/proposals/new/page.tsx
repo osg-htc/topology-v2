@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 import { MultiSelect } from "@/components/MultiSelect";
-import { ContactPersonInput } from "@/components/ContactPersonInput";
+import { ContactPicker } from "@/components/ContactPicker";
 import { ParentChainPicker, Placement, BundleOp } from "@/components/ParentChainPicker";
 
 const CONTACT_TYPES = [
@@ -24,8 +24,10 @@ const HOSTNAME_RE =
   /^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
 const isHostname = (h: string) => HOSTNAME_RE.test(h.trim());
 
-// Rank is derived from a contact's order within its type (1st = Primary, …).
-type ContactRow = { type: string; name: string; id: string };
+// Rank is derived from a contact's order within its type (1st = Primary, …); the
+// UI only exposes ordering. External ids are never shown — a contact is either
+// picked from existing users or onboarded via an invite (invitePending).
+type ContactRow = { type: string; name: string; id: string; inviteId?: string; invitePending?: boolean; inviteUrl?: string };
 type ServiceRow = { name: string; description: string };
 
 function NewResourceForm() {
@@ -159,6 +161,8 @@ function NewResourceForm() {
         target_name: editName ?? undefined,
         proposed_state: { name, resource_group: rg, resource },
       };
+      // Onboarding invites for any brand-new contacts block approval until accepted.
+      const pending = contacts.filter((c) => c.invitePending && c.inviteId).map((c) => c.inviteId!);
       // If the user created any parents inline, submit one atomic bundle with the
       // parents ordered before the resource; otherwise a plain resource proposal.
       const body =
@@ -168,8 +172,9 @@ function NewResourceForm() {
               operation: "create",
               submit: !asDraft,
               proposed_state: { operations: [...placement.ops, resourceOp] },
+              pending_invite_ids: pending,
             }
-          : { ...resourceOp, submit: !asDraft };
+          : { ...resourceOp, submit: !asDraft, pending_invite_ids: pending };
       const res = await api.proposals.create(body);
       router.push(`/proposals/view?id=${res.id}`);
     } catch (e) {
@@ -191,13 +196,6 @@ function NewResourceForm() {
   };
   const setService = (i: number, patch: Partial<ServiceRow>) =>
     setServices(services.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-
-  // Rank label for a contact = its position within its type.
-  const rankLabel = (i: number) => {
-    const t = contacts[i].type;
-    const n = contacts.slice(0, i + 1).filter((c) => c.type === t).length - 1;
-    return RANKS[Math.min(n, RANKS.length - 1)];
-  };
 
   return (
     <div className="p-8">
@@ -298,26 +296,23 @@ function NewResourceForm() {
           )}
           <div className="space-y-2">
             {contacts.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="flex flex-col text-gray-400">
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex flex-col pt-2 text-gray-400">
                   <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === 0} onClick={() => moveContact(i, -1)} aria-label="Move up">▲</button>
                   <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === contacts.length - 1} onClick={() => moveContact(i, 1)} aria-label="Move down">▼</button>
                 </div>
-                <span className="w-16 shrink-0 text-xs text-gray-400">{rankLabel(i)}</span>
-                <div className="grid flex-1 grid-cols-3 gap-2">
+                <div className="grid flex-1 grid-cols-2 gap-2">
                   <select className={input} value={c.type} onChange={(e) => setContact(i, { type: e.target.value })}>
                     {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  <ContactPersonInput
-                    name={c.name}
-                    id={c.id}
+                  <ContactPicker
+                    value={c}
                     isAdmin={isAdmin}
                     fallback={knownContacts ?? []}
-                    onChange={(nm, cid) => setContact(i, { name: nm, id: cid })}
+                    onChange={(patch) => setContact(i, patch)}
                   />
-                  <input className={input} placeholder="ID" value={c.id} onChange={(e) => setContact(i, { id: e.target.value })} />
                 </div>
-                <button type="button" className="text-gray-300 hover:text-red-600" onClick={() => removeContact(i)} aria-label="Remove contact">×</button>
+                <button type="button" className="pt-2 text-gray-300 hover:text-red-600" onClick={() => removeContact(i)} aria-label="Remove contact">×</button>
               </div>
             ))}
           </div>

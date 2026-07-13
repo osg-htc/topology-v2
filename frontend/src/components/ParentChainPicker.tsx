@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { input, label } from "./ui";
+import { InstitutionPicker } from "./InstitutionPicker";
 
 // A single operation inside a bundled change request.
 export type BundleOp = {
@@ -49,6 +50,8 @@ export function ParentChainPicker({
   const [facMode, setFacMode] = useState<"existing" | "new">("existing");
   const [existingFac, setExistingFac] = useState("");
   const [facName, setFacName] = useState("");
+  const [facInst, setFacInst] = useState(""); // institution id for a new facility
+  const [facInstValid, setFacInstValid] = useState(false);
 
   const rgNames = new Set((rgs ?? []).map((g) => g.name));
   const siteNames = new Set((sites ?? []).map((s) => s.name));
@@ -76,7 +79,7 @@ export function ParentChainPicker({
           facForSite = existingFac;
         } else {
           facForSite = facName;
-          if (facName) ops.push({ entity_kind: "facility", operation: "create", proposed_state: { name: facName, institution_id: "" } });
+          if (facName) ops.push({ entity_kind: "facility", operation: "create", proposed_state: { name: facName, institution_id: facInst } });
         }
         if (siteName) ops.push({ entity_kind: "site", operation: "create", proposed_state: { name: siteName, facility: facForSite, long_name: siteName } });
       }
@@ -84,16 +87,17 @@ export function ParentChainPicker({
 
       // Validity: names present, and any "existing" pick actually exists, and no
       // new name collides with an existing entity.
+      const facOK = facMode === "existing" ? facNames.has(existingFac) : !!facName && !facNames.has(facName) && facInstValid;
       const siteOK =
         siteMode === "existing"
           ? siteNames.has(existingSite)
-          : !!siteName && !siteNames.has(siteName) && (facMode === "existing" ? facNames.has(existingFac) : !!facName && !facNames.has(facName));
+          : !!siteName && !siteNames.has(siteName) && facOK;
       const valid = !!rgName && !rgNames.has(rgName) && siteOK;
       p = { rg: rgName, ops, valid };
     }
     onResolve(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, existingRg, rgName, siteMode, existingSite, siteName, facMode, existingFac, facName, rgs, sites, facilities]);
+  }, [mode, existingRg, rgName, siteMode, existingSite, siteName, facMode, existingFac, facName, facInst, facInstValid, rgs, sites, facilities]);
 
   const tab = (active: boolean) =>
     `rounded px-2 py-1 text-xs ${active ? "bg-brand-100 text-brand-800" : "text-gray-500 hover:bg-gray-100"}`;
@@ -172,10 +176,17 @@ export function ParentChainPicker({
                       </datalist>
                     </>
                   ) : (
-                    <>
+                    <div className="space-y-2">
                       <input className={input} value={facName} onChange={(e) => setFacName(e.target.value)} placeholder="e.g. University of Chicago" />
-                      {facName && facNames.has(facName) && <p className="mt-1 text-xs text-red-600">A facility named “{facName}” already exists.</p>}
-                    </>
+                      {facName && facNames.has(facName) && <p className="text-xs text-red-600">A facility named “{facName}” already exists.</p>}
+                      <InstitutionPicker
+                        value={facInst}
+                        onResolve={(iid, valid) => {
+                          setFacInst(iid);
+                          setFacInstValid(valid);
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

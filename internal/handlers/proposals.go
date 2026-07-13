@@ -35,6 +35,9 @@ type createProposalRequest struct {
 	ProposedState json.RawMessage `json:"proposed_state"`
 	Note          string          `json:"note"`
 	Submit        bool            `json:"submit"` // true = go straight to pending
+	// Onboarding invites for brand-new contacts this proposal introduces; the
+	// proposal can't be approved until they're accepted.
+	PendingInviteIDs []string `json:"pending_invite_ids"`
 }
 
 // CreateProposal creates a draft (or pending) change proposal.
@@ -86,6 +89,12 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "creating proposal")
 		return
+	}
+	if len(req.PendingInviteIDs) > 0 {
+		if err := h.queries.AddProposalPendingInvites(ctx, id, req.PendingInviteIDs); err != nil {
+			respondError(w, http.StatusInternalServerError, "linking pending invites")
+			return
+		}
 	}
 	h.audit(ctx, u.ID, "proposal.create", req.EntityKind, req.TargetName, id, nil)
 	respondJSON(w, http.StatusCreated, map[string]string{"id": id, "status": status})
@@ -205,6 +214,13 @@ func (h *Handler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Status != models.ProposalPending {
 		respondError(w, http.StatusConflict, "only pending proposals can be approved")
+		return
+	}
+	if n, err := h.queries.CountUnacceptedProposalInvites(ctx, id); err != nil {
+		respondError(w, http.StatusInternalServerError, "checking pending invites")
+		return
+	} else if n > 0 {
+		respondError(w, http.StatusConflict, "this request has a pending contact invite that must be accepted before it can be approved")
 		return
 	}
 	u := h.currentUser(r)
@@ -592,6 +608,15 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 	var fp facilityProposal
 	if err := json.Unmarshal(p.ProposedState, &fp); err != nil {
 		return err
+	}
+	// A facility must be tied to a real institution from the registry.
+	if fp.InstitutionID == "" {
+		return errors.New("a facility requires an institution (institution_id)")
+	}
+	if ok, err := q.InstitutionExists(ctx, fp.InstitutionID); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("institution %q is not in the registry — register it first", fp.InstitutionID)
 	}
 	if p.Operation == models.OpUpdate {
 		if err := q.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID); err != nil {

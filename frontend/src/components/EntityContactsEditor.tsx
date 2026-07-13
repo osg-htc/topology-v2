@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, EntityContact } from "@/lib/api";
 import { input, Card } from "./ui";
-import { ContactPersonInput } from "./ContactPersonInput";
+import { ContactPicker } from "./ContactPicker";
 
 export const CONTACT_TYPES = [
   "Administrative Contact",
@@ -12,26 +12,26 @@ export const CONTACT_TYPES = [
   "Local Operational Contact",
   "Local Security Contact",
 ];
+// Kept to order rows loaded from stored data and for slot-targeted invites; the
+// contact editor no longer shows these labels.
 export const RANKS = ["Primary", "Secondary", "Tertiary"];
 
-export type ContactRow = { type: string; name: string; id: string };
+export type ContactRow = { type: string; name: string; id: string; inviteId?: string; invitePending?: boolean; inviteUrl?: string };
 
-// toEntityContacts converts editor rows into the proposal `contacts` array,
-// deriving rank from each contact's order within its type.
+// toEntityContacts converts editor rows into the proposal `contacts` array, in
+// order. Rank is intentionally omitted — the backend derives it from order.
 export function toEntityContacts(rows: ContactRow[]) {
-  const perType: Record<string, number> = {};
-  const out: { contact_type: string; rank: string; name: string; id: string }[] = [];
-  for (const c of rows) {
-    if (!c.name && !c.id) continue;
-    const n = perType[c.type] ?? 0;
-    perType[c.type] = n + 1;
-    out.push({ contact_type: c.type, rank: RANKS[Math.min(n, RANKS.length - 1)], name: c.name, id: c.id });
-  }
-  return out;
+  return rows.filter((c) => c.name || c.id).map((c) => ({ contact_type: c.type, name: c.name, id: c.id }));
 }
 
-// fromEntityContacts converts stored entity contacts (with rank) into editor
-// rows ordered by type then rank.
+// pendingInviteIds collects the invite ids for any not-yet-onboarded contacts,
+// so the proposal can be blocked from approval until they are accepted.
+export function pendingInviteIds(rows: ContactRow[]): string[] {
+  return rows.filter((c) => c.invitePending && c.inviteId).map((c) => c.inviteId!);
+}
+
+// fromEntityContacts converts stored entity contacts into editor rows ordered by
+// type then rank (rank drives order but is not shown).
 export function fromEntityContacts(cs?: EntityContact[]): ContactRow[] {
   if (!cs?.length) return [];
   const rankIdx = (r: string) => Math.max(0, RANKS.indexOf(r));
@@ -61,31 +61,28 @@ export function EntityContactsEditor({
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
-  const rankLabel = (i: number) => {
-    const t = rows[i].type;
-    const n = rows.slice(0, i + 1).filter((c) => c.type === t).length - 1;
-    return RANKS[Math.min(n, RANKS.length - 1)];
-  };
-
   return (
     <Card>
       <h3 className="mb-3 text-sm font-semibold text-gray-700">Contacts</h3>
       <div className="space-y-2">
         {rows.map((c, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="flex flex-col text-gray-400">
+          <div key={i} className="flex items-start gap-2">
+            <div className="flex flex-col pt-2 text-gray-400">
               <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">▲</button>
               <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === rows.length - 1} onClick={() => move(i, 1)} aria-label="Move down">▼</button>
             </div>
-            <span className="w-16 shrink-0 text-xs text-gray-400">{rankLabel(i)}</span>
-            <div className="grid flex-1 grid-cols-3 gap-2">
+            <div className="grid flex-1 grid-cols-2 gap-2">
               <select className={input} value={c.type} onChange={(e) => set(i, { type: e.target.value })}>
                 {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <ContactPersonInput name={c.name} id={c.id} isAdmin={isAdmin} fallback={knownContacts ?? []} onChange={(nm, cid) => set(i, { name: nm, id: cid })} />
-              <input className={input} placeholder="ID" value={c.id} onChange={(e) => set(i, { id: e.target.value })} />
+              <ContactPicker
+                value={c}
+                isAdmin={isAdmin}
+                fallback={knownContacts ?? []}
+                onChange={(patch) => set(i, patch)}
+              />
             </div>
-            <button type="button" className="text-gray-300 hover:text-red-600" onClick={() => remove(i)} aria-label="Remove">×</button>
+            <button type="button" className="pt-2 text-gray-300 hover:text-red-600" onClick={() => remove(i)} aria-label="Remove">×</button>
           </div>
         ))}
         {rows.length === 0 && <p className="text-sm text-gray-400">No contacts at this level.</p>}
@@ -98,7 +95,7 @@ export function EntityContactsEditor({
       </button>
       <p className="mt-1 text-xs text-gray-400">
         Contacts here are inherited by resources in this scope (per type, unless a resource overrides it).
-        Order within a type sets its rank.
+        Use ▲▼ to set the order within a type.
       </p>
     </Card>
   );

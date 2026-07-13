@@ -18,9 +18,9 @@ test("register a resource creates a proposal", async ({ page }) => {
   // Host names must be valid DNS names (no underscores).
   await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase().replace(/_/g, "-")}.example.org`);
   // A contact is required for a complete registration. As an admin the person
-  // field is a live user search ("Search people…").
+  // field is a live user search ("Search people…"); external ids are no longer
+  // shown — picking a name is enough.
   await page.getByPlaceholder("Search people…").first().fill("E2E Admin");
-  await page.getByPlaceholder("ID", { exact: true }).first().fill("OSG1000016");
 
   const submit = page.getByRole("button", { name: "Submit for review" });
   await expect(submit).toBeEnabled();

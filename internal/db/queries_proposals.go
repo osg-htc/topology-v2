@@ -60,6 +60,33 @@ func (q *Queries) CreateProposal(ctx context.Context, p CreateProposalParams) (s
 	return id, tx.Commit(ctx)
 }
 
+// AddProposalPendingInvites links onboarding invites to a proposal. A proposal
+// with any unaccepted linked invite cannot be approved.
+func (q *Queries) AddProposalPendingInvites(ctx context.Context, proposalID string, inviteIDs []string) error {
+	for _, id := range inviteIDs {
+		if id == "" {
+			continue
+		}
+		if _, err := q.pool.Exec(ctx,
+			`INSERT INTO proposal_pending_invites (proposal_id, invite_id) VALUES ($1,$2)
+			 ON CONFLICT DO NOTHING`, proposalID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CountUnacceptedProposalInvites returns how many of a proposal's linked
+// onboarding invites are still unaccepted (used_at IS NULL).
+func (q *Queries) CountUnacceptedProposalInvites(ctx context.Context, proposalID string) (int, error) {
+	var n int
+	err := q.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM proposal_pending_invites ppi
+		 JOIN invites i ON i.id = ppi.invite_id
+		 WHERE ppi.proposal_id = $1 AND i.used_at IS NULL`, proposalID).Scan(&n)
+	return n, err
+}
+
 // AddRevision appends a new revision and updates the proposal head.
 func (q *Queries) AddRevision(ctx context.Context, proposalID string, state json.RawMessage, editedBy, note string) error {
 	tx, err := q.raw.Begin(ctx)

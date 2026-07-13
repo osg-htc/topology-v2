@@ -36,9 +36,7 @@ export function EntityContactsCard({
           <thead className="text-left text-xs uppercase tracking-wide text-gray-400">
             <tr>
               <th className="py-1 pr-4">Type</th>
-              <th className="py-1 pr-4">Rank</th>
               <th className="py-1 pr-4">Name</th>
-              <th className="py-1 pr-4">ID</th>
               {canManage && <th className="py-1">Take over</th>}
             </tr>
           </thead>
@@ -46,9 +44,7 @@ export function EntityContactsCard({
             {rows.map((c, i) => (
               <tr key={i} className="border-t border-gray-100">
                 <td className="py-1 pr-4 text-gray-700">{c.contact_type}</td>
-                <td className="py-1 pr-4 text-gray-500">{c.rank}</td>
                 <td className="py-1 pr-4 text-gray-700">{c.name || "—"}</td>
-                <td className="py-1 pr-4 text-xs text-gray-400">{c.id || "—"}</td>
                 {canManage && (
                   <td className="py-1">
                     <ContactReplaceActions
