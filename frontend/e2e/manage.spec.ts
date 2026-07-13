@@ -28,12 +28,16 @@ for (const { label, heading } of [
   });
 }
 
-test("resource form uses an RG dropdown with a create-new link", async ({ page }) => {
+test("resource form offers an RG dropdown and inline create-new", async ({ page }) => {
   await devLogin(page, "administrator", "admin@example.org");
   await page.goto("/proposals/new");
-  // RG field is backed by a datalist (dropdown/search), not free text validation.
+  // RG field is backed by a datalist (dropdown/search), not free-text validation,
+  // with Existing/Create-new tabs for inline parent creation.
   await expect(page.locator("#rg-options")).toHaveCount(1);
-  await expect(page.getByRole("link", { name: /New resource group/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create new" }).first()).toBeVisible();
+  // Switching to "Create new" reveals the inline new-group name field.
+  await page.getByRole("button", { name: "Create new" }).first().click();
+  await expect(page.getByPlaceholder("e.g. UChicago_ClusterA")).toBeVisible();
 });
 
 test("admin settings exposes OIDC configuration", async ({ page }) => {

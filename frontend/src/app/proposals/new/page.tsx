@@ -2,12 +2,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
 import { MultiSelect } from "@/components/MultiSelect";
 import { ContactPersonInput } from "@/components/ContactPersonInput";
+import { ParentChainPicker, Placement, BundleOp } from "@/components/ParentChainPicker";
 
 const CONTACT_TYPES = [
   "Administrative Contact",
@@ -33,7 +33,10 @@ function NewResourceForm() {
   const params = useSearchParams();
   const editName = params.get("edit");
   const [name, setName] = useState(editName ?? "");
-  const [rg, setRg] = useState(params.get("rg") ?? "");
+  // In edit mode the resource group is fixed; in create mode ParentChainPicker
+  // resolves the placement and any inline parent-creation operations.
+  const [placement, setPlacement] = useState<Placement>({ rg: params.get("rg") ?? "", ops: [], valid: false });
+  const rg = placement.rg;
   const [hostname, setHostname] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(false);
@@ -60,7 +63,7 @@ function NewResourceForm() {
   useEffect(() => {
     if (!editData) return;
     setName(editData.name);
-    setRg(editData.resource_group);
+    setPlacement({ rg: editData.resource_group, ops: [], valid: true });
     setHostname(editData.fqdn);
     setDescription(editData.description);
     setActive(editData.active);
@@ -79,7 +82,6 @@ function NewResourceForm() {
     }
   }, [editData]);
 
-  const { data: rgs } = useQuery({ queryKey: ["resource-groups", false], queryFn: () => api.resourceGroups() });
   const { data: serviceNames } = useQuery({ queryKey: ["service-names"], queryFn: api.serviceNames });
   const { data: voNames } = useQuery({ queryKey: ["vo-names"], queryFn: api.voNames });
   const { data: tagNames } = useQuery({ queryKey: ["tag-names"], queryFn: api.tagNames });
@@ -87,7 +89,7 @@ function NewResourceForm() {
   const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
   const isAdmin = session?.effective_role === "administrator";
 
-  const rgValid = new Set((rgs ?? []).map((g) => g.name)).has(rg);
+  const rgValid = placement.valid;
   const hasContact = contacts.some((c) => c.name || c.id);
   const tagOptions = Array.from(new Set([...COMMON_TAGS, ...(tagNames ?? [])]));
 
@@ -151,13 +153,24 @@ function NewResourceForm() {
       } else {
         resource = buildResource();
       }
-      const res = await api.proposals.create({
+      const resourceOp: BundleOp = {
         entity_kind: "resource",
         operation: editName ? "update" : "create",
         target_name: editName ?? undefined,
-        submit: !asDraft,
         proposed_state: { name, resource_group: rg, resource },
-      });
+      };
+      // If the user created any parents inline, submit one atomic bundle with the
+      // parents ordered before the resource; otherwise a plain resource proposal.
+      const body =
+        placement.ops.length > 0
+          ? {
+              entity_kind: "bundle",
+              operation: "create",
+              submit: !asDraft,
+              proposed_state: { operations: [...placement.ops, resourceOp] },
+            }
+          : { ...resourceOp, submit: !asDraft };
+      const res = await api.proposals.create(body);
       router.push(`/proposals/view?id=${res.id}`);
     } catch (e) {
       setErr(String(e));
@@ -200,23 +213,19 @@ function NewResourceForm() {
               <label className={label}>Resource name</label>
               <input className={input + errCls(invalid.name)} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. UChicago_OSGConnect_ap20" />
             </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className={`${label} mb-0`}>Resource group</label>
-                <Link href="/resource-groups/new?return=resource" className="text-xs text-brand-600 hover:underline">
-                  + New resource group
-                </Link>
+            {editName ? (
+              <div>
+                <label className={label}>Resource group</label>
+                <input className={`${input} bg-gray-50 text-gray-500`} value={rg} disabled />
+                <p className="mt-1 text-xs text-gray-400">A resource cannot be moved between groups here.</p>
               </div>
-              <input className={input + errCls(invalid.rg)} list="rg-options" value={rg} onChange={(e) => setRg(e.target.value)} placeholder="Search resource groups…" />
-              <datalist id="rg-options">
-                {(rgs ?? []).map((g) => (
-                  <option key={g.name} value={g.name}>{g.site} · {g.facility}</option>
-                ))}
-              </datalist>
-              {rg && !rgValid && (
-                <p className="mt-1 text-xs text-amber-600">“{rg}” is not an existing resource group — pick one or create it.</p>
-              )}
-            </div>
+            ) : (
+              <ParentChainPicker
+                value={placement.rg}
+                invalid={showErrors && invalid.rg}
+                onResolve={setPlacement}
+              />
+            )}
             <div>
               <label className={label}>Host name</label>
               <input className={input + errCls(invalid.hostname)} value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="host.example.org" />

@@ -208,7 +208,11 @@ func (h *Handler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := h.currentUser(r)
-	if err := h.applyProposal(ctx, p, u.ID); err != nil {
+	// Apply inside a transaction so a bundle's ordered operations (and every
+	// single-entity apply) commit or roll back atomically.
+	if err := h.queries.WithTx(ctx, func(tx *db.Queries) error {
+		return h.applyProposal(ctx, tx, p, u.ID)
+	}); err != nil {
 		respondError(w, http.StatusBadRequest, "applying proposal: "+err.Error())
 		return
 	}
@@ -280,7 +284,7 @@ type resourceProposal struct {
 
 // applyProposal dispatches by entity kind. Resources (the primary entity) are
 // fully supported; other kinds are added as the workflow expands.
-func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if !proposalschema.Known(p.EntityKind) {
 		return errUnsupportedKind
 	}
@@ -300,20 +304,66 @@ func (h *Handler) applyProposal(ctx context.Context, p *models.Proposal, actorID
 	}
 	switch p.EntityKind {
 	case models.KindResource:
-		return h.applyResourceProposal(ctx, p, actorID)
+		return h.applyResourceProposal(ctx, q, p, actorID)
 	case models.KindResourceGroup:
-		return h.applyResourceGroupProposal(ctx, p, actorID)
+		return h.applyResourceGroupProposal(ctx, q, p, actorID)
 	case models.KindSite:
-		return h.applySiteProposal(ctx, p, actorID)
+		return h.applySiteProposal(ctx, q, p, actorID)
 	case models.KindFacility:
-		return h.applyFacilityProposal(ctx, p, actorID)
+		return h.applyFacilityProposal(ctx, q, p, actorID)
 	case models.KindProject:
-		return h.applyProjectProposal(ctx, p, actorID)
+		return h.applyProjectProposal(ctx, q, p, actorID)
 	case models.KindDowntime:
-		return h.applyDowntimeProposal(ctx, p, actorID)
+		return h.applyDowntimeProposal(ctx, q, p, actorID)
+	case models.KindBundle:
+		return h.applyBundleProposal(ctx, q, p, actorID)
 	default:
 		return errUnsupportedKind
 	}
+}
+
+// bundleOp is one operation inside a bundled change request.
+type bundleOp struct {
+	EntityKind    string          `json:"entity_kind"`
+	Operation     string          `json:"operation"`
+	TargetName    string          `json:"target_name"`
+	ProposedState json.RawMessage `json:"proposed_state"`
+	SchemaVersion int             `json:"schema_version"`
+}
+
+type bundleProposal struct {
+	Operations []bundleOp `json:"operations"`
+}
+
+// applyBundleProposal applies each operation in order using the SAME transaction
+// (q is already tx-bound at the ApproveProposal call site), so the whole bundle
+// commits or rolls back together. This is what lets a resource and its missing
+// parents (facility -> site -> resource group -> resource) be created in one
+// atomic change request.
+func (h *Handler) applyBundleProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
+	var bp bundleProposal
+	if err := json.Unmarshal(p.ProposedState, &bp); err != nil {
+		return err
+	}
+	if len(bp.Operations) == 0 {
+		return errors.New("bundle has no operations")
+	}
+	for i, op := range bp.Operations {
+		if op.EntityKind == models.KindBundle {
+			return fmt.Errorf("operation %d: bundles cannot be nested", i+1)
+		}
+		sub := &models.Proposal{
+			EntityKind:    op.EntityKind,
+			Operation:     op.Operation,
+			TargetName:    op.TargetName,
+			ProposedState: op.ProposedState,
+			SchemaVersion: op.SchemaVersion,
+		}
+		if err := h.applyProposal(ctx, q, sub, actorID); err != nil {
+			return fmt.Errorf("operation %d (%s %s): %w", i+1, op.Operation, op.EntityKind, err)
+		}
+	}
+	return nil
 }
 
 type downtimeProposal struct {
@@ -344,13 +394,13 @@ func normalizeDowntimeTime(s string) (string, error) {
 	return "", fmt.Errorf("unrecognized time %q", s)
 }
 
-func (h *Handler) applyDowntimeProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyDowntimeProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
 		id, err := strconv.ParseInt(p.TargetName, 10, 64)
 		if err != nil {
 			return fmt.Errorf("delete downtime: bad id %q", p.TargetName)
 		}
-		return h.queries.SoftDeleteDowntimeByID(ctx, id, actorID)
+		return q.SoftDeleteDowntimeByID(ctx, id, actorID)
 	}
 	var dp downtimeProposal
 	if err := json.Unmarshal(p.ProposedState, &dp); err != nil {
@@ -369,15 +419,15 @@ func (h *Handler) applyDowntimeProposal(ctx context.Context, p *models.Proposal,
 		if err != nil {
 			return fmt.Errorf("update downtime: bad id %q", p.TargetName)
 		}
-		return h.queries.UpdateDowntimeByID(ctx, id, dp.Class, dp.Severity, dp.Description, start, end, dp.Services)
+		return q.UpdateDowntimeByID(ctx, id, dp.Class, dp.Severity, dp.Description, start, end, dp.Services)
 	}
 	// create
-	rgID, err := h.queries.ResourceRGID(ctx, dp.Resource)
+	rgID, err := q.ResourceRGID(ctx, dp.Resource)
 	if err != nil {
 		return fmt.Errorf("create downtime: unknown resource %q", dp.Resource)
 	}
 	now := time.Now()
-	return h.queries.InsertDowntime(ctx, db.DowntimeRow{
+	return q.InsertDowntime(ctx, db.DowntimeRow{
 		DtID:         now.Unix(),
 		RGID:         rgID,
 		ResourceName: dp.Resource,
@@ -404,9 +454,9 @@ type projectProposal struct {
 	Sponsor          map[string]interface{} `json:"sponsor"`
 }
 
-func (h *Handler) applyProjectProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
-		return h.queries.SoftDeleteProjectByName(ctx, p.TargetName, actorID)
+		return q.SoftDeleteProjectByName(ctx, p.TargetName, actorID)
 	}
 	var pp projectProposal
 	if err := json.Unmarshal(p.ProposedState, &pp); err != nil {
@@ -418,7 +468,7 @@ func (h *Handler) applyProjectProposal(ctx context.Context, p *models.Proposal, 
 		sponsorJSON = nil
 	}
 	// UpsertProject handles both create and update (keyed by active name).
-	return h.queries.UpsertProject(ctx, db.ProjectRow{
+	return q.UpsertProject(ctx, db.ProjectRow{
 		Name: pp.Name, ProjectID: pp.ID, Description: pp.Description, Department: pp.Department,
 		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
 		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
@@ -448,21 +498,21 @@ type rgProposal struct {
 	Contacts         []db.EntityContact `json:"contacts"`
 }
 
-func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
-		return h.queries.SoftDeleteResourceGroupByName(ctx, p.TargetName, actorID)
+		return q.SoftDeleteResourceGroupByName(ctx, p.TargetName, actorID)
 	}
 	var rp rgProposal
 	if err := json.Unmarshal(p.ProposedState, &rp); err != nil {
 		return err
 	}
-	siteID, err := h.queries.SiteIDByName(ctx, rp.Site)
+	siteID, err := q.SiteIDByName(ctx, rp.Site)
 	if err != nil {
 		return errors.New("site not found: " + rp.Site)
 	}
 	// Update in place (preserving child resources); create when new.
 	if p.Operation == models.OpUpdate {
-		if err := h.queries.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
+		if err := q.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
 			return err
 		}
 	} else {
@@ -470,7 +520,7 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Prop
 		if rp.Production != nil {
 			prod = *rp.Production
 		}
-		if _, err := h.queries.InsertResourceGroup(ctx, db.ResourceGroupRow{
+		if _, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{
 			GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
 			Production: &prod, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
 			IDExplicit: false,
@@ -478,7 +528,7 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, p *models.Prop
 			return err
 		}
 	}
-	return h.queries.ReplaceEntityContacts(ctx, models.KindResourceGroup, rp.Name, rp.Contacts, actorID)
+	return q.ReplaceEntityContacts(ctx, models.KindResourceGroup, rp.Name, rp.Contacts, actorID)
 }
 
 type siteProposal struct {
@@ -497,15 +547,15 @@ type siteProposal struct {
 	Contacts     []db.EntityContact `json:"contacts"`
 }
 
-func (h *Handler) applySiteProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
-		return h.queries.SoftDeleteSiteByName(ctx, p.TargetName, actorID)
+		return q.SoftDeleteSiteByName(ctx, p.TargetName, actorID)
 	}
 	var sp siteProposal
 	if err := json.Unmarshal(p.ProposedState, &sp); err != nil {
 		return err
 	}
-	facID, err := h.queries.FacilityIDByName(ctx, sp.Facility)
+	facID, err := q.FacilityIDByName(ctx, sp.Facility)
 	if err != nil {
 		return errors.New("facility not found: " + sp.Facility)
 	}
@@ -516,17 +566,17 @@ func (h *Handler) applySiteProposal(ctx context.Context, p *models.Proposal, act
 		Latitude: sp.Latitude, Longitude: sp.Longitude,
 	}
 	if p.Operation == models.OpUpdate {
-		if err := h.queries.UpdateSiteFields(ctx, row); err != nil {
+		if err := q.UpdateSiteFields(ctx, row); err != nil {
 			return err
 		}
 	} else {
 		row.TopologyID = topology.GenID(sp.Name)
 		row.IDExplicit = false
-		if _, err := h.queries.InsertSite(ctx, row); err != nil {
+		if _, err := q.InsertSite(ctx, row); err != nil {
 			return err
 		}
 	}
-	return h.queries.ReplaceEntityContacts(ctx, models.KindSite, sp.Name, sp.Contacts, actorID)
+	return q.ReplaceEntityContacts(ctx, models.KindSite, sp.Name, sp.Contacts, actorID)
 }
 
 type facilityProposal struct {
@@ -535,27 +585,27 @@ type facilityProposal struct {
 	Contacts      []db.EntityContact `json:"contacts"`
 }
 
-func (h *Handler) applyFacilityProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
-		return h.queries.SoftDeleteFacilityByName(ctx, p.TargetName, actorID)
+		return q.SoftDeleteFacilityByName(ctx, p.TargetName, actorID)
 	}
 	var fp facilityProposal
 	if err := json.Unmarshal(p.ProposedState, &fp); err != nil {
 		return err
 	}
 	if p.Operation == models.OpUpdate {
-		if err := h.queries.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID); err != nil {
+		if err := q.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID); err != nil {
 			return err
 		}
 	} else {
-		if _, err := h.queries.InsertFacility(ctx, db.FacilityRow{
+		if _, err := q.InsertFacility(ctx, db.FacilityRow{
 			TopologyID: topology.GenID(fp.Name), Name: fp.Name,
 			InstitutionID: fp.InstitutionID, IDExplicit: false,
 		}); err != nil {
 			return err
 		}
 	}
-	return h.queries.ReplaceEntityContacts(ctx, models.KindFacility, fp.Name, fp.Contacts, actorID)
+	return q.ReplaceEntityContacts(ctx, models.KindFacility, fp.Name, fp.Contacts, actorID)
 }
 
 // orEmptyJSON returns b, or an empty JSON object if b is empty.
@@ -566,14 +616,14 @@ func orEmptyJSON(b json.RawMessage) []byte {
 	return b
 }
 
-func (h *Handler) applyResourceProposal(ctx context.Context, p *models.Proposal, actorID string) error {
+func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	// Delete: soft-delete the target resource.
 	if p.Operation == models.OpDelete {
-		id, err := h.queries.ResourceIDByName(ctx, p.TargetName)
+		id, err := q.ResourceIDByName(ctx, p.TargetName)
 		if err != nil {
 			return err
 		}
-		return h.queries.SoftDeleteResource(ctx, id, actorID)
+		return q.SoftDeleteResource(ctx, id, actorID)
 	}
 
 	var rp resourceProposal
@@ -583,19 +633,19 @@ func (h *Handler) applyResourceProposal(ctx context.Context, p *models.Proposal,
 	if rp.Name == "" || rp.ResourceGroup == "" {
 		return errBadProposalState
 	}
-	rgID, err := h.queries.ResourceGroupIDByName(ctx, rp.ResourceGroup)
+	rgID, err := q.ResourceGroupIDByName(ctx, rp.ResourceGroup)
 	if err != nil {
 		return err
 	}
 	// Update: soft-delete the existing version first (versioned via delete+insert).
 	if p.Operation == models.OpUpdate {
-		if id, err := h.queries.ResourceIDByName(ctx, rp.Name); err == nil {
-			if err := h.queries.SoftDeleteResource(ctx, id, actorID); err != nil {
+		if id, err := q.ResourceIDByName(ctx, rp.Name); err == nil {
+			if err := q.SoftDeleteResource(ctx, id, actorID); err != nil {
 				return err
 			}
 		}
 	}
-	_, err = topology.UpsertResource(ctx, h.queries, rgID, rp.Name, &rp.Resource)
+	_, err = topology.UpsertResource(ctx, q, rgID, rp.Name, &rp.Resource)
 	return err
 }
 

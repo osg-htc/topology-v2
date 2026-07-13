@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topology.opensciencegrid.org/proposal/bundle/v1",
+  "title": "Bundled change proposal (v1)",
+  "description": "An ordered set of dependent operations applied atomically, e.g. create a facility, then a site, then a resource group, then a resource.",
+  "type": "object",
+  "required": ["operations"],
+  "additionalProperties": false,
+  "properties": {
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["entity_kind", "operation", "proposed_state"],
+        "additionalProperties": false,
+        "properties": {
+          "entity_kind": {
+            "type": "string",
+            "enum": ["resource", "resource_group", "site", "facility", "project", "downtime"]
+          },
+          "operation": { "type": "string", "enum": ["create", "update", "delete"] },
+          "target_name": { "type": "string" },
+          "schema_version": { "type": "integer" },
+          "proposed_state": { "type": "object" }
+        }
+      }
+    }
+  }
+}

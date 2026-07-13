@@ -30,6 +30,7 @@ const (
 	KindFacility      = "facility"
 	KindProject       = "project"
 	KindDowntime      = "downtime"
+	KindBundle        = "bundle"
 )
 
 // Proposal is a living draft of a create/update/delete change to a topology

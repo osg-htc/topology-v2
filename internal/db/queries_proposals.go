@@ -27,7 +27,7 @@ type CreateProposalParams struct {
 
 // CreateProposal inserts a proposal and its first revision atomically.
 func (q *Queries) CreateProposal(ctx context.Context, p CreateProposalParams) (string, error) {
-	tx, err := q.pool.Begin(ctx)
+	tx, err := q.raw.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func (q *Queries) CreateProposal(ctx context.Context, p CreateProposalParams) (s
 
 // AddRevision appends a new revision and updates the proposal head.
 func (q *Queries) AddRevision(ctx context.Context, proposalID string, state json.RawMessage, editedBy, note string) error {
-	tx, err := q.pool.Begin(ctx)
+	tx, err := q.raw.Begin(ctx)
 	if err != nil {
 		return err
 	}
