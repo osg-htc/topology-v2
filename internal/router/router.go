@@ -131,6 +131,13 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 
 			// Contact-replacement requests: propose yourself for a contact slot;
 			// the incumbent (or a manager/admin) approves.
+			// Email verification: prove control of an address via a single-use link.
+			r.Route("/email-verifications", func(r chi.Router) {
+				r.Get("/", h.ListEmailVerifications)
+				r.Post("/", h.RequestEmailVerification)
+				r.Post("/confirm", h.ConfirmEmailVerification)
+			})
+
 			r.Route("/contact-replacements", func(r chi.Router) {
 				r.Post("/", h.CreateContactReplacement)
 				r.Get("/mine", h.ListMyReplacements)

@@ -58,7 +58,11 @@ export function ParentChainPicker({
   useEffect(() => {
     let p: Placement;
     if (mode === "existing") {
-      p = { rg: existingRg, ops: [], valid: rgNames.has(existingRg) };
+      // While the group list is still loading, accept a non-empty name
+      // optimistically (apply-time validation is the backstop); once loaded,
+      // require it to be a real group.
+      const known = rgs === undefined ? existingRg !== "" : rgNames.has(existingRg);
+      p = { rg: existingRg, ops: [], valid: known };
     } else {
       const ops: BundleOp[] = [];
       // Resolve the site (and facility) the new RG lives in.

@@ -207,6 +207,19 @@ export const api = {
     withdraw: (id: string) =>
       fetchJSON<{ status: string }>(`/contact-replacements/${id}/withdraw`, { method: "POST" }),
   },
+  emailVerifications: {
+    list: () => fetchJSON<EmailVerification[]>("/email-verifications"),
+    request: (email: string) =>
+      fetchJSON<{ status: string; email: string; verify_url?: string }>("/email-verifications", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    confirm: (token: string) =>
+      fetchJSON<{ status: string; email: string }>("/email-verifications/confirm", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+  },
   audit: () => fetchJSON<AuditEntry[]>("/audit"),
   userLabels: (ids: string[]) =>
     fetchJSON<UserLabelT[]>(`/user-labels?ids=${encodeURIComponent(ids.join(","))}`),
@@ -440,6 +453,12 @@ export interface AdminUser {
     email?: string;
     cilogon_id?: string;
   }[];
+}
+
+export interface EmailVerification {
+  email_hint: string;
+  verified: boolean;
+  created_at: string;
 }
 
 export interface ContactReplacement {

@@ -68,10 +68,13 @@ export function Sidebar({ session }: { session: SessionInfo }) {
           </>
         )}
       </nav>
-      <div className="border-t border-navy-800 px-4 py-3 text-xs text-navy-100/80">
+      <Link
+        href="/account"
+        className="block border-t border-navy-800 px-4 py-3 text-xs text-navy-100/80 hover:bg-navy-800"
+      >
         <div className="font-medium text-white">{session.user.display_name}</div>
-        <div className="capitalize">{role}</div>
-      </div>
+        <div className="capitalize">{role} · account settings</div>
+      </Link>
     </aside>
   );
 }
