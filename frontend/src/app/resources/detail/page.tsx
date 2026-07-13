@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 import { DetailField } from "@/components/DetailField";
 import { DowntimesTable } from "@/components/DowntimesTable";
+import { InviteContactButton } from "@/components/InviteContactButton";
 
 function ResourceDetailView() {
   const name = useSearchParams().get("name") || "";
@@ -96,7 +97,10 @@ function ResourceDetailView() {
           </Card>
 
           <Card>
-            <h3 className="mb-3 text-sm font-semibold text-gray-700">Contacts</h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700">Contacts</h3>
+              {canManage && <InviteContactButton entityKind="resource" entityName={r.name} />}
+            </div>
             {(r.contacts ?? []).length === 0 ? (
               <p className="text-sm text-amber-600">
                 No contacts registered — contacts are required for a complete registration.

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 import { DetailField } from "@/components/DetailField";
+import { EntityContactsCard } from "@/components/EntityContactsCard";
 
 function SiteDetailView() {
   const name = useSearchParams().get("name") || "";
@@ -58,6 +59,7 @@ function SiteDetailView() {
           </ul>
         </Card>
       </div>
+      <EntityContactsCard entityKind="site" entityName={s.name} contacts={s.contacts} />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 import { DetailField } from "@/components/DetailField";
 import { DowntimesTable } from "@/components/DowntimesTable";
+import { EntityContactsCard } from "@/components/EntityContactsCard";
 
 function RGDetailView() {
   const name = useSearchParams().get("name") || "";
@@ -67,6 +68,7 @@ function RGDetailView() {
           </ul>
         </Card>
       </div>
+      <EntityContactsCard entityKind="resource_group" entityName={rg.name} contacts={rg.contacts} />
       <Card className="mt-6">
         <h3 className="mb-3 text-sm font-semibold text-gray-700">Downtimes</h3>
         <DowntimesTable downtimes={downtimes ?? []} showResource />

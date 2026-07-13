@@ -580,20 +580,30 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "invalid claim")
 			return
 		}
-		if claim.EntityKind == models.KindResource || claim.EntityKind == "" {
+		cilogon := h.primaryCILogonID(ctx, u.ID)
+		switch claim.EntityKind {
+		case models.KindResource, "":
 			resID, err := h.queries.ResourceIDByName(ctx, claim.EntityID)
 			if err != nil {
 				respondError(w, http.StatusBadRequest, "claim target resource not found")
 				return
 			}
-			cilogon := h.primaryCILogonID(ctx, u.ID)
 			if err := h.queries.AddResourceContact(ctx, resID, claim.ContactType, claim.Rank,
 				u.DisplayName, cilogon, u.ID); err != nil {
 				respondError(w, http.StatusInternalServerError, "assigning responsibility")
 				return
 			}
-			h.audit(ctx, u.ID, "role_claim.accept", claim.EntityKind, claim.EntityID, "", inv.ClaimJSON)
+		case models.KindResourceGroup, models.KindSite, models.KindFacility:
+			if err := h.queries.AddEntityContact(ctx, claim.EntityKind, claim.EntityID,
+				claim.ContactType, claim.Rank, u.DisplayName, cilogon, u.ID); err != nil {
+				respondError(w, http.StatusInternalServerError, "assigning responsibility")
+				return
+			}
+		default:
+			respondError(w, http.StatusBadRequest, "unsupported claim entity kind")
+			return
 		}
+		h.audit(ctx, u.ID, "role_claim.accept", claim.EntityKind, claim.EntityID, "", inv.ClaimJSON)
 	}
 
 	if err := h.queries.MarkInviteUsed(ctx, inv.ID, u.ID); err != nil {

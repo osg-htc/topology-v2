@@ -35,6 +35,17 @@ func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, name string, 
 	return nil
 }
 
+// AddEntityContact appends a single contact to a parent entity (resource_group /
+// site / facility), linking it to the given user. Used when a role_claim invite
+// is accepted for one of these entities.
+func (q *Queries) AddEntityContact(ctx context.Context, kind, name, contactType, rank, contactName, contactID, userID string) error {
+	_, err := q.pool.Exec(ctx,
+		`INSERT INTO entity_contacts (entity_kind, entity_name, contact_type, rank, contact_name, contact_id, user_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		kind, name, contactType, rank, nullString(contactName), nullString(contactID), nullString(userID))
+	return err
+}
+
 // ListEntityContacts returns the active contacts for a parent entity.
 func (q *Queries) ListEntityContacts(ctx context.Context, kind, name string) ([]EntityContact, error) {
 	rows, err := q.pool.Query(ctx,
