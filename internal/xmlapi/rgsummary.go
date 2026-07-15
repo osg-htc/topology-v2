@@ -23,12 +23,12 @@ const (
 
 // Filters selects which resource groups/resources appear in the summary.
 type Filters struct {
-	FacilityIDs map[int64]bool
-	SiteIDs     map[int64]bool
-	RGIDs       map[int64]bool
-	SCIDs       map[int64]bool
-	ServiceIDs  map[int64]bool
-	Active      *bool
+	FacilityIDs  map[int64]bool
+	SiteIDs      map[int64]bool
+	RGIDs        map[int64]bool
+	SCIDs        map[int64]bool
+	ServiceIDs   map[int64]bool
+	Active       *bool
 	GridTypeProd bool // include production
 	GridTypeITB  bool // include ITB
 	HasWLCG      bool
@@ -158,8 +158,8 @@ type ContactListsXML struct {
 	ContactLists []ContactListXML `xml:"ContactList"`
 }
 type ContactListXML struct {
-	ContactType string       `xml:"ContactType"`
-	Contacts    ContactsXML  `xml:"Contacts"`
+	ContactType string      `xml:"ContactType"`
+	Contacts    ContactsXML `xml:"Contacts"`
 }
 type ContactsXML struct {
 	Contacts []ContactXML `xml:"Contact"`
@@ -328,12 +328,12 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 		rx := ResourceXML{
 			ID: r.TopologyID, Name: r.Name, Active: active, Disable: !active,
 			Description: r.Description, FQDN: r.FQDN,
-			Tags:        TagsXML{Tags: r.Tags},
-			FQDNAliases: FQDNAliasesXML{Aliases: r.FQDNAliases},
-			VOOwnership: voOwnershipXML(r.VOOwnership),
-			WLCG:        wlcgXML(r.WLCGInformation),
+			Tags:         TagsXML{Tags: r.Tags},
+			FQDNAliases:  FQDNAliasesXML{Aliases: r.FQDNAliases},
+			VOOwnership:  voOwnershipXML(r.VOOwnership),
+			WLCG:         wlcgXML(r.WLCGInformation),
 			ContactLists: buildContactLists(ctx, q, enc, r.ID, includePII),
-			IsCCStar:    isCC,
+			IsCCStar:     isCC,
 		}
 		if len(svcXMLs) > 0 {
 			rx.Services = &ServicesXML{Services: svcXMLs}

@@ -13,8 +13,8 @@ import (
 func TestArchiveEncryptRoundTrip(t *testing.T) {
 	src := t.TempDir()
 	files := map[string]string{
-		"University of Chicago/FACILITY.yaml":          "ID: 10023\n",
-		"University of Chicago/UChicago/SITE.yaml":      "ID: 10181\nCity: Chicago\n",
+		"University of Chicago/FACILITY.yaml":            "ID: 10023\n",
+		"University of Chicago/UChicago/SITE.yaml":       "ID: 10181\nCity: Chicago\n",
 		"University of Chicago/UChicago/UChicago_X.yaml": "Production: true\n",
 		"services.yaml": "CE: 1\n",
 	}

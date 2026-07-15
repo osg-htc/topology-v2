@@ -226,9 +226,9 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 type onboardParams struct {
-	Issuer, Subject, Email, Name          string
-	CILogonID, EPPN, OIDC, IdPName        string
-	InviteToken                           string
+	Issuer, Subject, Email, Name   string
+	CILogonID, EPPN, OIDC, IdPName string
+	InviteToken                    string
 }
 
 // onboardIdentity links a brand-new federated identity to an account. Order of

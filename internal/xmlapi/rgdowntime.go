@@ -23,19 +23,19 @@ type DowntimeList struct {
 }
 
 type DowntimeXML struct {
-	ID            int64             `xml:"ID"`
-	ResourceID    int64             `xml:"ResourceID"`
-	ResourceGroup DowntimeRGXML     `xml:"ResourceGroup"`
-	ResourceName  string            `xml:"ResourceName"`
-	ResourceFQDN  string            `xml:"ResourceFQDN"`
-	StartTime     string            `xml:"StartTime"`
-	EndTime       string            `xml:"EndTime"`
-	Class         string            `xml:"Class"`
-	Severity      string            `xml:"Severity"`
-	CreatedTime   string            `xml:"CreatedTime,omitempty"`
-	UpdateTime    string            `xml:"UpdateTime"`
-	Services      DowntimeSvcsXML   `xml:"Services"`
-	Description   string            `xml:"Description"`
+	ID            int64           `xml:"ID"`
+	ResourceID    int64           `xml:"ResourceID"`
+	ResourceGroup DowntimeRGXML   `xml:"ResourceGroup"`
+	ResourceName  string          `xml:"ResourceName"`
+	ResourceFQDN  string          `xml:"ResourceFQDN"`
+	StartTime     string          `xml:"StartTime"`
+	EndTime       string          `xml:"EndTime"`
+	Class         string          `xml:"Class"`
+	Severity      string          `xml:"Severity"`
+	CreatedTime   string          `xml:"CreatedTime,omitempty"`
+	UpdateTime    string          `xml:"UpdateTime"`
+	Services      DowntimeSvcsXML `xml:"Services"`
+	Description   string          `xml:"Description"`
 }
 
 type DowntimeRGXML struct {

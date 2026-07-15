@@ -33,8 +33,8 @@ func TestResourceValidation(t *testing.T) {
 	}
 
 	bads := map[string][]byte{
-		"missing FQDN":           []byte(`{"name":"X","resource_group":"RG","resource":{"Active":true}}`),
-		"missing name":           []byte(`{"resource_group":"RG","resource":{"FQDN":"x"}}`),
+		"missing FQDN":            []byte(`{"name":"X","resource_group":"RG","resource":{"Active":true}}`),
+		"missing name":            []byte(`{"resource_group":"RG","resource":{"FQDN":"x"}}`),
 		"unknown top-level field": []byte(`{"name":"X","resource_group":"RG","resource":{"FQDN":"x"},"bogus":1}`),
 	}
 	for label, payload := range bads {

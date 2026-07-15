@@ -50,15 +50,15 @@ func EffectiveRole(roles []string) string {
 // User is an account. Contacts imported from the legacy topology data are
 // provisioned users (IsProvisioned=true) until someone logs in and claims them.
 type User struct {
-	ID              string    `json:"id"`
-	DisplayName     string    `json:"display_name"`
-	Username        string    `json:"username,omitempty"`
-	Status          string    `json:"status"`
-	LegacyContactID string    `json:"legacy_contact_id,omitempty"`
-	IsProvisioned   bool      `json:"is_provisioned"`
+	ID              string     `json:"id"`
+	DisplayName     string     `json:"display_name"`
+	Username        string     `json:"username,omitempty"`
+	Status          string     `json:"status"`
+	LegacyContactID string     `json:"legacy_contact_id,omitempty"`
+	IsProvisioned   bool       `json:"is_provisioned"`
 	LastLogin       *time.Time `json:"last_login,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 
 	// Populated by joins where relevant.
 	Roles      []string       `json:"roles,omitempty"`
@@ -72,7 +72,7 @@ type UserIdentity struct {
 	UserID      string    `json:"user_id"`
 	Issuer      string    `json:"issuer"`
 	Subject     string    `json:"subject"`
-	Email       string    `json:"email,omitempty"`     // decrypted on demand
+	Email       string    `json:"email,omitempty"` // decrypted on demand
 	EmailSHA1   string    `json:"email_sha1,omitempty"`
 	EPPN        string    `json:"eppn,omitempty"`
 	OIDC        string    `json:"oidc,omitempty"`
@@ -95,15 +95,15 @@ type Session struct {
 // Invite is a single-use invitation, either to link a federated identity to an
 // existing account or to claim a responsibility (role_claim).
 type Invite struct {
-	ID           string          `json:"id"`
-	Kind         string          `json:"kind"`
-	CreatedBy    string          `json:"created_by,omitempty"`
-	TargetUserID string          `json:"target_user_id,omitempty"`
-	Claim        *RoleClaim      `json:"claim,omitempty"`
-	UsedAt       *time.Time      `json:"used_at,omitempty"`
-	UsedBy       string          `json:"used_by,omitempty"`
-	ExpiresAt    time.Time       `json:"expires_at"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID           string     `json:"id"`
+	Kind         string     `json:"kind"`
+	CreatedBy    string     `json:"created_by,omitempty"`
+	TargetUserID string     `json:"target_user_id,omitempty"`
+	Claim        *RoleClaim `json:"claim,omitempty"`
+	UsedAt       *time.Time `json:"used_at,omitempty"`
+	UsedBy       string     `json:"used_by,omitempty"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // Invite kinds.
@@ -117,7 +117,7 @@ const (
 // RoleClaim describes a responsibility offered by a role_claim invite, e.g.
 // becoming the Security Contact (rank Primary) on a given resource.
 type RoleClaim struct {
-	EntityKind  string `json:"entity_kind"`  // resource | resource_group | ...
+	EntityKind  string `json:"entity_kind"` // resource | resource_group | ...
 	EntityID    string `json:"entity_id"`
 	ContactType string `json:"contact_type"` // Security Contact | Administrative Contact | ...
 	Rank        string `json:"rank"`         // Primary | Secondary | Tertiary

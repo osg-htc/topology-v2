@@ -72,14 +72,14 @@ func (q *Queries) ListBrowseRGs(ctx context.Context, includeDeleted bool) ([]Bro
 
 // BrowseSite is a site list row.
 type BrowseSite struct {
-	Name        string `json:"name"`
-	SiteID      int64  `json:"site_id"`
-	Facility    string `json:"facility"`
-	LongName    string `json:"long_name"`
-	City        string `json:"city"`
-	State       string `json:"state"`
-	Country     string `json:"country"`
-	Deleted     bool   `json:"deleted"`
+	Name     string `json:"name"`
+	SiteID   int64  `json:"site_id"`
+	Facility string `json:"facility"`
+	LongName string `json:"long_name"`
+	City     string `json:"city"`
+	State    string `json:"state"`
+	Country  string `json:"country"`
+	Deleted  bool   `json:"deleted"`
 }
 
 // ListBrowseSites lists sites (active only unless includeDeleted).

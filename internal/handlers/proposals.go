@@ -548,16 +548,16 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 }
 
 type siteProposal struct {
-	Name         string   `json:"name"`
-	Facility     string   `json:"facility"`
-	LongName     string   `json:"long_name"`
-	Description  string   `json:"description"`
-	AddressLine1 string   `json:"address_line1"`
-	AddressLine2 string   `json:"address_line2"`
-	City         string   `json:"city"`
-	State        string   `json:"state"`
-	Country      string   `json:"country"`
-	Zipcode      string   `json:"zipcode"`
+	Name         string             `json:"name"`
+	Facility     string             `json:"facility"`
+	LongName     string             `json:"long_name"`
+	Description  string             `json:"description"`
+	AddressLine1 string             `json:"address_line1"`
+	AddressLine2 string             `json:"address_line2"`
+	City         string             `json:"city"`
+	State        string             `json:"state"`
+	Country      string             `json:"country"`
+	Zipcode      string             `json:"zipcode"`
 	Latitude     *float64           `json:"latitude"`
 	Longitude    *float64           `json:"longitude"`
 	Contacts     []db.EntityContact `json:"contacts"`

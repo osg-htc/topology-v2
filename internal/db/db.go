@@ -47,8 +47,8 @@ type DBTX interface {
 // Queries wraps the connection (pool or transaction) with hand-written SQL
 // methods. Domain-specific methods live in sibling files (queries_*.go).
 type Queries struct {
-	pool DBTX            // used by every query method; a pool or an active tx
-	raw  *pgxpool.Pool   // concrete pool, for Pool() and starting transactions
+	pool DBTX          // used by every query method; a pool or an active tx
+	raw  *pgxpool.Pool // concrete pool, for Pool() and starting transactions
 }
 
 // New returns a Queries bound to the given pool.

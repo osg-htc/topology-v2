@@ -138,8 +138,12 @@ func (h *Handler) DecideReplacement(w http.ResponseWriter, r *http.Request, appr
 
 // ApproveReplacement / RejectReplacement / WithdrawReplacement are the routed
 // handlers around DecideReplacement.
-func (h *Handler) ApproveReplacement(w http.ResponseWriter, r *http.Request) { h.DecideReplacement(w, r, true) }
-func (h *Handler) RejectReplacement(w http.ResponseWriter, r *http.Request)  { h.DecideReplacement(w, r, false) }
+func (h *Handler) ApproveReplacement(w http.ResponseWriter, r *http.Request) {
+	h.DecideReplacement(w, r, true)
+}
+func (h *Handler) RejectReplacement(w http.ResponseWriter, r *http.Request) {
+	h.DecideReplacement(w, r, false)
+}
 
 // WithdrawReplacement lets the requester cancel their own pending request.
 func (h *Handler) WithdrawReplacement(w http.ResponseWriter, r *http.Request) {

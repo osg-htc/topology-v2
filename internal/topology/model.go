@@ -74,21 +74,21 @@ type ResourceGroup struct {
 
 // Resource is the primary entity, nested under a ResourceGroup's Resources map.
 type Resource struct {
-	ID              *int64                         `yaml:"ID,omitempty"`
-	Active          *bool                          `yaml:"Active,omitempty"`
-	Description     string                         `yaml:"Description,omitempty"`
-	FQDN            string                         `yaml:"FQDN"`
-	FQDNAliases     []string                       `yaml:"FQDNAliases,omitempty"`
-	DN              string                         `yaml:"DN,omitempty"`
-	ContactLists    map[string]map[string]Contact  `yaml:"ContactLists,omitempty"`
-	Services        map[string]*Service            `yaml:"Services,omitempty"`
-	Tags            []string                       `yaml:"Tags,omitempty"`
-	AllowedVOs      []string                       `yaml:"AllowedVOs,omitempty"`
+	ID           *int64                        `yaml:"ID,omitempty"`
+	Active       *bool                         `yaml:"Active,omitempty"`
+	Description  string                        `yaml:"Description,omitempty"`
+	FQDN         string                        `yaml:"FQDN"`
+	FQDNAliases  []string                      `yaml:"FQDNAliases,omitempty"`
+	DN           string                        `yaml:"DN,omitempty"`
+	ContactLists map[string]map[string]Contact `yaml:"ContactLists,omitempty"`
+	Services     map[string]*Service           `yaml:"Services,omitempty"`
+	Tags         []string                      `yaml:"Tags,omitempty"`
+	AllowedVOs   []string                      `yaml:"AllowedVOs,omitempty"`
 	// VOOwnership/WLCGInformation are normally maps, but a few malformed source
 	// files carry scalars there; interface{} tolerates whatever PyYAML accepted.
-	VOOwnership     interface{}                    `yaml:"VOOwnership,omitempty"`
-	WLCGInformation interface{}                    `yaml:"WLCGInformation,omitempty"`
-	Extra           map[string]interface{}         `yaml:",inline"`
+	VOOwnership     interface{}            `yaml:"VOOwnership,omitempty"`
+	WLCGInformation interface{}            `yaml:"WLCGInformation,omitempty"`
+	Extra           map[string]interface{} `yaml:",inline"`
 }
 
 // Contact is one entry in a ContactLists rank (Primary/Secondary/Tertiary).
@@ -121,10 +121,10 @@ type Downtime struct {
 
 // Topology is the whole tree loaded from disk.
 type Topology struct {
-	Facilities     map[string]*Facility        // by facility name
-	Sites          map[string]*Site            // by site name
-	ResourceGroups map[string]*ResourceGroup   // by RG name
-	Downtimes      map[string][]*Downtime      // by RG name
+	Facilities     map[string]*Facility      // by facility name
+	Sites          map[string]*Site          // by site name
+	ResourceGroups map[string]*ResourceGroup // by RG name
+	Downtimes      map[string][]*Downtime    // by RG name
 	// Parentage needed to reconstruct the directory tree.
 	SiteFacility map[string]string // site name -> facility name
 	RGSite       map[string]string // RG name -> site name

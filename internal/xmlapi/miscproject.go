@@ -16,17 +16,17 @@ type Projects struct {
 }
 
 type ProjectXML struct {
-	ID                  string        `xml:"ID,omitempty"`
-	Name                string        `xml:"Name"`
-	Description         string        `xml:"Description"`
-	PIName              string        `xml:"PIName"`
-	Organization        string        `xml:"Organization"`
-	Department          string        `xml:"Department,omitempty"`
-	FieldOfScience      string        `xml:"FieldOfScience"`
-	Sponsor             SponsorXML    `xml:"Sponsor"`
-	ResourceAllocations RAListXML     `xml:"ResourceAllocations"`
-	InstitutionID       string        `xml:"InstitutionID"`
-	FieldOfScienceID    string        `xml:"FieldOfScienceID"`
+	ID                  string     `xml:"ID,omitempty"`
+	Name                string     `xml:"Name"`
+	Description         string     `xml:"Description"`
+	PIName              string     `xml:"PIName"`
+	Organization        string     `xml:"Organization"`
+	Department          string     `xml:"Department,omitempty"`
+	FieldOfScience      string     `xml:"FieldOfScience"`
+	Sponsor             SponsorXML `xml:"Sponsor"`
+	ResourceAllocations RAListXML  `xml:"ResourceAllocations"`
+	InstitutionID       string     `xml:"InstitutionID"`
+	FieldOfScienceID    string     `xml:"FieldOfScienceID"`
 }
 
 type SponsorXML struct {
@@ -41,9 +41,9 @@ type RAListXML struct {
 	Allocations []RAXML `xml:"ResourceAllocation"`
 }
 type RAXML struct {
-	Type                  string          `xml:"Type"`
-	SubmitResources       SubmitResXML    `xml:"SubmitResources"`
-	ExecuteResourceGroups ExecuteRGsXML   `xml:"ExecuteResourceGroups"`
+	Type                  string        `xml:"Type"`
+	SubmitResources       SubmitResXML  `xml:"SubmitResources"`
+	ExecuteResourceGroups ExecuteRGsXML `xml:"ExecuteResourceGroups"`
 }
 type SubmitResXML struct {
 	SubmitResource []string `xml:"SubmitResource"`
@@ -81,8 +81,8 @@ func BuildProjects(ctx context.Context, q *db.Queries) (*Projects, error) {
 			ID: p.ProjectID, Name: p.Name, Description: p.Description,
 			PIName: p.PIName, Organization: p.Organization, Department: p.Department,
 			FieldOfScience: p.FieldOfScience, InstitutionID: p.InstitutionID,
-			FieldOfScienceID: p.FieldOfScienceID,
-			Sponsor:          sponsorXML(p.SponsorType, p.SponsorName, voID),
+			FieldOfScienceID:    p.FieldOfScienceID,
+			Sponsor:             sponsorXML(p.SponsorType, p.SponsorName, voID),
 			ResourceAllocations: resourceAllocationsXML(p.Extra),
 		}
 		out.Projects = append(out.Projects, px)

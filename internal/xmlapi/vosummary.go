@@ -240,7 +240,7 @@ func credentialsXML(v interface{}) *CredentialsXML {
 // ---- small map helpers ----
 
 func mstr(m map[string]interface{}, key string) string { return getStr(m, key) }
-func mbool(m map[string]interface{}, key string) bool   { return getBool(m, key) }
+func mbool(m map[string]interface{}, key string) bool  { return getBool(m, key) }
 
 func asSlice(v interface{}) []interface{} {
 	if s, ok := v.([]interface{}); ok {
