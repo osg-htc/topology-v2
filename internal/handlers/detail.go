@@ -4,21 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
 
 // ResourceDetailHandler returns a single resource with services, contacts, tags,
-// VO ownership, and parentage — the full picture for the detail page.
+// VO ownership, and parentage — the full picture for the detail page. Looked
+// up by topology_id, not name: a resource's name is a mutable field, its id
+// is the immutable key, so the URL must not change across a rename.
 func (h *Handler) ResourceDetailHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	name := chi.URLParam(r, "name")
-	d, err := h.queries.GetResourceDetail(ctx, name)
+	resID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid resource id")
+		return
+	}
+	d, err := h.queries.GetResourceDetail(ctx, resID)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "resource not found")
 		return
 	}
-	resID, _ := h.queries.ResourceIDByName(ctx, name)
 
 	// Services.
 	svcRows, _ := h.queries.ListResourceServices(ctx, resID)
@@ -66,7 +72,7 @@ func (h *Handler) ResourceDetailHandler(w http.ResponseWriter, r *http.Request) 
 	dts, _ := h.queries.ListDowntimes(ctx)
 	downtimes := make([]map[string]any, 0)
 	for _, dt := range dts {
-		if dt.ResourceName == name {
+		if dt.ResourceName == d.Name {
 			downtimes = append(downtimes, downtimeJSON(dt))
 		}
 	}
@@ -155,7 +161,7 @@ func (h *Handler) FacilityDetailHandler(w http.ResponseWriter, r *http.Request) 
 // inherited from its RG → site → facility. A contact type defined on the
 // resource fully overrides the same type from any ancestor; otherwise the
 // nearest ancestor that defines the type is inherited.
-func (h *Handler) effectiveResourceContacts(ctx context.Context, resID, rg, site, facility string) []map[string]any {
+func (h *Handler) effectiveResourceContacts(ctx context.Context, resID int64, rg, site, facility string) []map[string]any {
 	out := make([]map[string]any, 0)
 	covered := map[string]bool{} // contact types already resolved
 

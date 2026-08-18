@@ -27,11 +27,11 @@ type EntityContact struct {
 // ReplaceEntityContacts sets the contacts for a parent entity (resource_group /
 // site / facility): soft-deletes the current set and inserts the new one,
 // bootstrapping a provisioned user per contact.
-func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, name string, contacts []EntityContact, byUser string) error {
+func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, targetName, newName string, contacts []EntityContact, byUser string) error {
 	if _, err := q.pool.Exec(ctx,
 		`UPDATE entity_contacts SET deleted_at = NOW(), deleted_by = $3
 		 WHERE entity_kind = $1 AND entity_name = $2 AND deleted_at IS NULL`,
-		kind, name, nullString(byUser)); err != nil {
+		kind, targetName, nullString(byUser)); err != nil {
 		return err
 	}
 	// Derive rank from order within each contact type (1st = Primary, …).
@@ -46,7 +46,7 @@ func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, name string, 
 		if _, err := q.pool.Exec(ctx,
 			`INSERT INTO entity_contacts (entity_kind, entity_name, contact_type, rank, contact_name, contact_id, user_id)
 			 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			kind, name, c.ContactType, rank, nullString(c.Name), nullString(c.ID), nullString(userID)); err != nil {
+			kind, newName, c.ContactType, rank, nullString(c.Name), nullString(c.ID), nullString(userID)); err != nil {
 			return err
 		}
 	}

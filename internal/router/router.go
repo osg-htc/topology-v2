@@ -65,7 +65,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		// JSON forms of the topology read API for the frontend (snake_case).
 		r.With(h.OptionalAuth).Get("/rgsummary", h.RGSummaryJSON)
 		r.Get("/resources", h.ResourcesJSON)
-		r.Get("/resources/{name}", h.ResourceDetailHandler)
+		r.Get("/resources/{id}", h.ResourceDetailHandler)
 		r.Get("/summary", h.SummaryHandler)
 		r.Get("/resource-groups", h.ListResourceGroupsHandler)
 		r.Get("/resource-groups/{name}", h.ResourceGroupDetailHandler)

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Card, PageHeader, StatusBadge, LinkButton } from "@/components/ui";
 import { UserLabel } from "@/components/UserLabel";
+import { proposalSummary } from "@/lib/proposalSummary";
 
 export default function DashboardPage() {
   const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
@@ -133,7 +134,9 @@ function ProposalList({
             <span className="font-medium text-navy-900">
               {p.operation} {p.entity_kind}
             </span>
-            {p.target_name && <span className="ml-2 text-sm text-gray-500">{p.target_name}</span>}
+            {/* target_name is now an immutable id for a resource, not a name --
+                proposalSummary already knows to prefer a name from the payload. */}
+            <span className="ml-2 text-sm text-gray-500">{proposalSummary(p).title}</span>
           </div>
           <div className="flex items-center gap-3">
             {review && (

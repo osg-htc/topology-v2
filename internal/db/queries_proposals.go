@@ -253,28 +253,28 @@ func (q *Queries) ResourceGroupIDByName(ctx context.Context, name string) (strin
 	return id, err
 }
 
-// ResourceIDByName returns the active resource id for a name.
-func (q *Queries) ResourceIDByName(ctx context.Context, name string) (string, error) {
-	var id string
+// ResourceIDByName returns the active resource's topology_id for a name.
+func (q *Queries) ResourceIDByName(ctx context.Context, name string) (int64, error) {
+	var id int64
 	err := q.pool.QueryRow(ctx,
-		`SELECT id FROM resources WHERE name = $1 AND deleted_at IS NULL`, name).Scan(&id)
+		`SELECT topology_id FROM resources WHERE name = $1 AND deleted_at IS NULL`, name).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrNotFound
+		return 0, ErrNotFound
 	}
 	return id, err
 }
 
 // SoftDeleteResource marks a resource (and is a no-op if already gone).
-func (q *Queries) SoftDeleteResource(ctx context.Context, id, byUser string) error {
+func (q *Queries) SoftDeleteResource(ctx context.Context, topologyID int64, byUser string) error {
 	_, err := q.pool.Exec(ctx,
-		`UPDATE resources SET deleted_at = NOW(), deleted_by = $2 WHERE id = $1 AND deleted_at IS NULL`,
-		id, nullString(byUser))
+		`UPDATE resources SET deleted_at = NOW(), deleted_by = $2 WHERE topology_id = $1 AND deleted_at IS NULL`,
+		topologyID, nullString(byUser))
 	return err
 }
 
 // AddResourceContact assigns a contact/responsibility to a resource, linking a
 // user when known (used by role-claim invite acceptance).
-func (q *Queries) AddResourceContact(ctx context.Context, resourceID, contactType, rank, name, contactID, userID string) error {
+func (q *Queries) AddResourceContact(ctx context.Context, resourceID int64, contactType, rank, name, contactID, userID string) error {
 	_, err := q.pool.Exec(ctx,
 		`INSERT INTO resource_contacts (resource_id, contact_type, rank, contact_name, contact_id, user_id)
 		 VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -286,11 +286,11 @@ func (q *Queries) AddResourceContact(ctx context.Context, resourceID, contactTyp
 // matched either by resolved user_id or by any of their legacy contact ids.
 func (q *Queries) ResourcesForContactIDs(ctx context.Context, userID string, legacyIDs []string) ([]ResourceRow, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT DISTINCT r.id, r.topology_id, rg.name, r.name, r.active,
+		`SELECT DISTINCT r.topology_id, rg.name, r.name, r.active,
 		        COALESCE(r.description,''), r.fqdn, COALESCE(r.dn,'')
 		 FROM resources r
 		 JOIN resource_groups rg ON rg.id = r.resource_group_id
-		 JOIN resource_contacts rc ON rc.resource_id = r.id AND rc.deleted_at IS NULL
+		 JOIN resource_contacts rc ON rc.resource_id = r.topology_id AND rc.deleted_at IS NULL
 		 WHERE r.deleted_at IS NULL
 		   AND (rc.user_id = $1 OR rc.contact_id = ANY($2))
 		 ORDER BY r.name`, userID, legacyIDs)
@@ -301,7 +301,7 @@ func (q *Queries) ResourcesForContactIDs(ctx context.Context, userID string, leg
 	var out []ResourceRow
 	for rows.Next() {
 		var r ResourceRow
-		if err := rows.Scan(&r.ID, &r.TopologyID, &r.RGName, &r.Name, &r.Active,
+		if err := rows.Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active,
 			&r.Description, &r.FQDN, &r.DN); err != nil {
 			return nil, err
 		}

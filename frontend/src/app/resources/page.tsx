@@ -7,10 +7,10 @@ import { PageHeader, LinkButton, Card, input } from "@/components/ui";
 import { DataTable } from "@/components/DataTable";
 import { useIsReviewer } from "@/components/entityActions";
 
-function ExpandedResource({ name }: { name: string }) {
+function ExpandedResource({ id }: { id: number }) {
   const { data: r } = useQuery({
-    queryKey: ["resource-detail", name],
-    queryFn: () => api.resourceDetail(name),
+    queryKey: ["resource-detail", id],
+    queryFn: () => api.resourceDetail(id),
   });
   if (!r) return <p className="text-sm text-gray-400">Loading…</p>;
   return (
@@ -80,7 +80,7 @@ export default function ResourcesPage() {
       ) : (
         <DataTable<DashboardResource>
           rows={rows}
-          rowKey={(r) => r.name}
+          rowKey={(r) => String(r.id)}
           canDelete={isReviewer}
           columns={[
             { header: "Name", sortValue: (r) => r.name, cell: (r) => <span className="font-medium text-navy-900">{r.name}</span> },
@@ -100,12 +100,13 @@ export default function ResourcesPage() {
               ),
             },
           ]}
-          expanded={(r) => <ExpandedResource name={r.name} />}
+          expanded={(r) => <ExpandedResource id={r.id} />}
           actions={(r) => ({
-            detailHref: `/resources/detail?name=${encodeURIComponent(r.name)}`,
-            editHref: `/proposals/new?edit=${encodeURIComponent(r.name)}`,
+            detailHref: `/resources/detail?id=${r.id}`,
+            editHref: `/proposals/new?edit=${r.id}`,
             entityKind: "resource",
-            name: r.name,
+            name: String(r.id),
+            displayName: r.name,
             onChanged: () => qc.invalidateQueries({ queryKey: ["resources"] }),
           })}
         />

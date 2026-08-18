@@ -19,7 +19,7 @@ func (q *Queries) GetContactSlot(ctx context.Context, kind, name, contactType, r
 	if kind == "resource" {
 		err = q.pool.QueryRow(ctx,
 			`SELECT COALESCE(rc.contact_name,''), rc.user_id
-			 FROM resource_contacts rc JOIN resources r ON r.id = rc.resource_id
+			 FROM resource_contacts rc JOIN resources r ON r.topology_id = rc.resource_id
 			 WHERE r.name = $1 AND r.deleted_at IS NULL AND rc.deleted_at IS NULL
 			   AND rc.contact_type = $2 AND rc.rank = $3
 			 LIMIT 1`, name, contactType, rank).Scan(&s.Name, &uid)
@@ -45,9 +45,9 @@ func (q *Queries) GetContactSlot(ctx context.Context, kind, name, contactType, r
 // the current row (if any) and inserts a fresh one linked to the new user.
 func (q *Queries) ReplaceContactSlot(ctx context.Context, kind, name, contactType, rank, newName, newContactID, newUserID, byUser string) error {
 	if kind == "resource" {
-		var resID string
+		var resID int64
 		if err := q.pool.QueryRow(ctx,
-			`SELECT id FROM resources WHERE name = $1 AND deleted_at IS NULL`, name).Scan(&resID); err != nil {
+			`SELECT topology_id FROM resources WHERE name = $1 AND deleted_at IS NULL`, name).Scan(&resID); err != nil {
 			return ErrNotFound
 		}
 		if _, err := q.pool.Exec(ctx,
@@ -168,5 +168,24 @@ func (q *Queries) DecideContactReplacement(ctx context.Context, id, status, deci
 	_, err := q.pool.Exec(ctx,
 		`UPDATE contact_replacements SET status = $2, decided_at = NOW(), decided_by = $3
 		 WHERE id = $1 AND status = 'pending'`, id, status, nullString(decidedBy))
+	return err
+}
+
+// RepointEntityNameReferences re-points any live contact hand-offs (pending
+// replacement requests, unused role-claim/replacement-request invites) from
+// an entity's old name to its new name after a rename. Both store a snapshot
+// of the entity's name at creation time and go stale on rename otherwise.
+func (q *Queries) RepointEntityNameReferences(ctx context.Context, kind, targetName, newName string) error {
+	if _, err := q.pool.Exec(ctx,
+		`UPDATE contact_replacements SET entity_name = $3
+		 WHERE entity_kind = $1 AND entity_name = $2 AND status = 'pending'`,
+		kind, targetName, newName); err != nil {
+		return err
+	}
+	_, err := q.pool.Exec(ctx,
+		`UPDATE invites SET claim = jsonb_set(claim, '{entity_id}', to_jsonb($3::text))
+		 WHERE kind IN ('role_claim','replacement_request') AND used_at IS NULL
+		   AND claim->>'entity_kind' = $1 AND claim->>'entity_id' = $2`,
+		kind, targetName, newName)
 	return err
 }

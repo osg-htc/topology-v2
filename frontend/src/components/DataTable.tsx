@@ -18,7 +18,8 @@ export type RowActions = {
   detailHref: string; // standalone detail page ("pop-out")
   editHref: string; // edit form
   entityKind: string; // for the delete change request
-  name: string;
+  name: string; // target_name sent with the delete change request
+  displayName?: string; // shown in the confirm dialog/aria-label; defaults to name
   onChanged?: () => void;
 };
 
@@ -46,7 +47,14 @@ function Actions({ a, canDelete }: { a: RowActions; canDelete: boolean }) {
       <Link href={a.detailHref} title="Open standalone page" aria-label={`Open ${a.name}`} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-brand-700">
         <PopOutIcon />
       </Link>
-      {canDelete && <DeleteButton entityKind={a.entityKind} name={a.name} onDone={a.onChanged} />}
+      {canDelete && (
+        <DeleteButton
+          entityKind={a.entityKind}
+          name={a.name}
+          displayName={a.displayName}
+          onDone={a.onChanged}
+        />
+      )}
     </div>
   );
 }

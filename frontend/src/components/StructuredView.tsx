@@ -99,7 +99,13 @@ function BundleView({ operations }: { operations: Record<string, unknown>[] }) {
             </div>
             <div className="pl-7">
               {operation === "delete" ? (
-                <p className="text-sm text-gray-600">Delete “{String(op.target_name ?? "")}”.</p>
+                <p className="text-sm text-gray-600">
+                  Delete “
+                  {String(
+                    (op.proposed_state as { name?: string } | null)?.name ?? op.target_name ?? "",
+                  )}
+                  ”.
+                </p>
               ) : (
                 <Node value={op.proposed_state} />
               )}

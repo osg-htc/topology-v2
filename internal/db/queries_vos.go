@@ -76,6 +76,22 @@ func (q *Queries) UpsertProject(ctx context.Context, r ProjectRow) error {
 	return err
 }
 
+// UpdateProjectFields updates an existing active project in place, keyed by
+// its original name (targetName), allowing the name itself to change.
+func (q *Queries) UpdateProjectFields(ctx context.Context, targetName string, r ProjectRow) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE projects SET name=$2, project_id=$3, description=$4, department=$5,
+		    field_of_science=$6, field_of_science_id=$7, organization=$8, pi_name=$9,
+		    institution_id=$10, sponsor=$11, sponsor_type=$12, sponsor_name=$13,
+		    extra=$14, updated_at=NOW()
+		 WHERE name=$1 AND deleted_at IS NULL`,
+		targetName, r.Name, nullString(r.ProjectID), nullString(r.Description), nullString(r.Department),
+		nullString(r.FieldOfScience), nullString(r.FieldOfScienceID), nullString(r.Organization),
+		nullString(r.PIName), nullString(r.InstitutionID), nullBytes(r.Sponsor),
+		nullString(r.SponsorType), nullString(r.SponsorName), nullBytes(r.Extra))
+	return err
+}
+
 // ListProjects returns all active projects, ordered by name.
 func (q *Queries) ListProjects(ctx context.Context) ([]ProjectRow, error) {
 	rows, err := q.pool.Query(ctx,

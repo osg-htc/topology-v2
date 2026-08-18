@@ -97,7 +97,11 @@ function ProposalView() {
             </div>
             {p.operation === "delete" ? (
               <p className="text-sm text-gray-600">
-                Proposes deleting <span className="font-medium">{p.target_name}</span>.
+                Proposes deleting{" "}
+                <span className="font-medium">
+                  {(p.proposed_state as { name?: string } | null)?.name ?? p.target_name}
+                </span>
+                .
               </p>
             ) : (
               <StructuredView value={p.proposed_state} />

@@ -121,8 +121,7 @@ export const api = {
   dashboard: () => fetchJSON<Dashboard>("/dashboard"),
   summary: () => fetchJSON<Summary>("/summary"),
   resources: () => fetchJSON<Record<string, DashboardResource>>("/resources"),
-  resourceDetail: (name: string) =>
-    fetchJSON<ResourceDetail>(`/resources/${encodeURIComponent(name)}`),
+  resourceDetail: (id: number) => fetchJSON<ResourceDetail>(`/resources/${id}`),
   resourceGroupDetail: (name: string) =>
     fetchJSON<RGDetail>(`/resource-groups/${encodeURIComponent(name)}`),
   siteDetail: (name: string) => fetchJSON<SiteDetail>(`/sites/${encodeURIComponent(name)}`),

@@ -12,11 +12,12 @@ import { InviteContactButton } from "@/components/InviteContactButton";
 import { ContactReplaceActions } from "@/components/ContactReplaceActions";
 
 function ResourceDetailView() {
-  const name = useSearchParams().get("name") || "";
+  const idParam = useSearchParams().get("id");
+  const id = idParam ? Number(idParam) : NaN;
   const { data: r, isLoading } = useQuery({
-    queryKey: ["resource-detail", name],
-    queryFn: () => api.resourceDetail(name),
-    enabled: !!name,
+    queryKey: ["resource-detail", id],
+    queryFn: () => api.resourceDetail(id),
+    enabled: !Number.isNaN(id),
   });
   const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
   const canManage = !!session?.user?.id;

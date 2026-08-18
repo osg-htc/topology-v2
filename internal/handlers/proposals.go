@@ -483,13 +483,16 @@ func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *mo
 	if len(pp.Sponsor) == 0 {
 		sponsorJSON = nil
 	}
-	// UpsertProject handles both create and update (keyed by active name).
-	return q.UpsertProject(ctx, db.ProjectRow{
+	row := db.ProjectRow{
 		Name: pp.Name, ProjectID: pp.ID, Description: pp.Description, Department: pp.Department,
 		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
 		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
 		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName,
-	})
+	}
+	if p.Operation == models.OpUpdate {
+		return q.UpdateProjectFields(ctx, p.TargetName, row)
+	}
+	return q.UpsertProject(ctx, row)
 }
 
 // sponsorTypeName extracts the sponsor kind + name from a sponsor block.
@@ -528,7 +531,7 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 	}
 	// Update in place (preserving child resources); create when new.
 	if p.Operation == models.OpUpdate {
-		if err := q.UpdateResourceGroupFields(ctx, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
+		if err := q.UpdateResourceGroupFields(ctx, p.TargetName, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
 			return err
 		}
 	} else {
@@ -544,7 +547,13 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 			return err
 		}
 	}
-	return q.ReplaceEntityContacts(ctx, models.KindResourceGroup, rp.Name, rp.Contacts, actorID)
+	if err := q.ReplaceEntityContacts(ctx, models.KindResourceGroup, p.TargetName, rp.Name, rp.Contacts, actorID); err != nil {
+		return err
+	}
+	if p.Operation == models.OpUpdate {
+		return q.RepointEntityNameReferences(ctx, models.KindResourceGroup, p.TargetName, rp.Name)
+	}
+	return nil
 }
 
 type siteProposal struct {
@@ -582,7 +591,7 @@ func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *model
 		Latitude: sp.Latitude, Longitude: sp.Longitude,
 	}
 	if p.Operation == models.OpUpdate {
-		if err := q.UpdateSiteFields(ctx, row); err != nil {
+		if err := q.UpdateSiteFields(ctx, p.TargetName, row); err != nil {
 			return err
 		}
 	} else {
@@ -592,7 +601,13 @@ func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *model
 			return err
 		}
 	}
-	return q.ReplaceEntityContacts(ctx, models.KindSite, sp.Name, sp.Contacts, actorID)
+	if err := q.ReplaceEntityContacts(ctx, models.KindSite, p.TargetName, sp.Name, sp.Contacts, actorID); err != nil {
+		return err
+	}
+	if p.Operation == models.OpUpdate {
+		return q.RepointEntityNameReferences(ctx, models.KindSite, p.TargetName, sp.Name)
+	}
+	return nil
 }
 
 type facilityProposal struct {
@@ -619,7 +634,7 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 		return fmt.Errorf("institution %q is not in the registry — register it first", fp.InstitutionID)
 	}
 	if p.Operation == models.OpUpdate {
-		if err := q.UpdateFacilityFields(ctx, fp.Name, fp.InstitutionID); err != nil {
+		if err := q.UpdateFacilityFields(ctx, p.TargetName, fp.Name, fp.InstitutionID); err != nil {
 			return err
 		}
 	} else {
@@ -630,7 +645,13 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 			return err
 		}
 	}
-	return q.ReplaceEntityContacts(ctx, models.KindFacility, fp.Name, fp.Contacts, actorID)
+	if err := q.ReplaceEntityContacts(ctx, models.KindFacility, p.TargetName, fp.Name, fp.Contacts, actorID); err != nil {
+		return err
+	}
+	if p.Operation == models.OpUpdate {
+		return q.RepointEntityNameReferences(ctx, models.KindFacility, p.TargetName, fp.Name)
+	}
+	return nil
 }
 
 // orEmptyJSON returns b, or an empty JSON object if b is empty.
@@ -641,14 +662,18 @@ func orEmptyJSON(b json.RawMessage) []byte {
 	return b
 }
 
+// applyResourceProposal targets a resource by its immutable topology_id
+// (p.TargetName holds it as a decimal string -- the same convention
+// applyDowntimeProposal already uses for dt_id), never by name. A resource's
+// name is just a mutable field now: renaming it must never change identity,
+// duplicate the row, or orphan its services/contacts.
 func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
-	// Delete: soft-delete the target resource.
 	if p.Operation == models.OpDelete {
-		id, err := q.ResourceIDByName(ctx, p.TargetName)
+		topID, err := strconv.ParseInt(p.TargetName, 10, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("delete resource: bad id %q", p.TargetName)
 		}
-		return q.SoftDeleteResource(ctx, id, actorID)
+		return q.SoftDeleteResource(ctx, topID, actorID)
 	}
 
 	var rp resourceProposal
@@ -662,25 +687,28 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 	if err != nil {
 		return err
 	}
-	// Update: soft-delete the existing version first (versioned via delete+insert).
+
 	if p.Operation == models.OpUpdate {
-		if id, err := q.ResourceIDByName(ctx, rp.Name); err == nil {
-			if err := q.SoftDeleteResource(ctx, id, actorID); err != nil {
-				return err
-			}
+		topID, err := strconv.ParseInt(p.TargetName, 10, 64)
+		if err != nil {
+			return fmt.Errorf("update resource: bad id %q", p.TargetName)
 		}
+		return topology.UpdateResourceFromProposal(ctx, q, topID, rgID, rp.Name, &rp.Resource, actorID)
 	}
-	_, err = topology.UpsertResource(ctx, q, rgID, rp.Name, &rp.Resource)
+	_, err = topology.CreateResourceFromProposal(ctx, q, rgID, rp.Name, &rp.Resource)
 	return err
 }
 
 // snapshotResource captures the current resource state as base_version.
-func (h *Handler) snapshotResource(ctx context.Context, name string) json.RawMessage {
-	id, err := h.queries.ResourceIDByName(ctx, name)
+// target is the resource's topology_id: for a resource proposal, target_name
+// now holds the id (not the name) -- see applyResourceProposal -- so no
+// lookup is needed, just parse it back out.
+func (h *Handler) snapshotResource(ctx context.Context, target string) json.RawMessage {
+	id, err := strconv.ParseInt(target, 10, 64)
 	if err != nil {
 		return nil
 	}
-	b, _ := json.Marshal(map[string]string{"resource_id": id, "name": name})
+	b, _ := json.Marshal(map[string]any{"resource_id": id})
 	return b
 }
 

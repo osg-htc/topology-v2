@@ -304,7 +304,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 		if f.Active != nil && active != *f.Active {
 			continue
 		}
-		svcs, _ := q.ListResourceServices(ctx, r.ID)
+		svcs, _ := q.ListResourceServices(ctx, r.TopologyID)
 		var svcXMLs []ServiceXML
 		for _, s := range svcs {
 			id, ok := q.ServiceIDByName(ctx, s.ServiceName)
@@ -332,7 +332,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 			FQDNAliases:  FQDNAliasesXML{Aliases: r.FQDNAliases},
 			VOOwnership:  voOwnershipXML(r.VOOwnership),
 			WLCG:         wlcgXML(r.WLCGInformation),
-			ContactLists: buildContactLists(ctx, q, enc, r.ID, includePII),
+			ContactLists: buildContactLists(ctx, q, enc, r.TopologyID, includePII),
 			IsCCStar:     isCC,
 		}
 		if len(svcXMLs) > 0 {
@@ -362,7 +362,7 @@ func voOwnershipXML(v []byte) VOOwnershipXML {
 	return x
 }
 
-func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, resourceID string, includePII bool) ContactListsXML {
+func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, resourceID int64, includePII bool) ContactListsXML {
 	contacts, _ := q.ListResourceContacts(ctx, resourceID)
 	byType := map[string][]ContactXML{}
 	order := []string{}

@@ -26,12 +26,15 @@ function TrashIcon() {
 export function DeleteButton({
   entityKind,
   name,
+  displayName,
   onDone,
 }: {
   entityKind: string;
   name: string;
+  displayName?: string;
   onDone?: () => void;
 }) {
+  const label = displayName ?? name;
   const [msg, setMsg] = useState("");
   const mut = useMutation({
     mutationFn: () =>
@@ -39,6 +42,11 @@ export function DeleteButton({
         entity_kind: entityKind,
         operation: "delete",
         target_name: name,
+        // A delete carries no payload the backend reads, but the review/list
+        // pages summarize a proposal from proposed_state -- for a resource,
+        // target_name is now the immutable id, so without this the summary
+        // would show a raw number instead of the resource's name.
+        proposed_state: displayName ? { name: displayName } : undefined,
         submit: true,
       }),
     onSuccess: () => {
@@ -51,10 +59,10 @@ export function DeleteButton({
   return (
     <button
       title="Delete"
-      aria-label={`Delete ${name}`}
+      aria-label={`Delete ${label}`}
       className="inline-flex items-center rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
       onClick={() => {
-        if (confirm(`Delete ${name}? This files a change request a reviewer must approve.`))
+        if (confirm(`Delete ${label}? This files a change request a reviewer must approve.`))
           mut.mutate();
       }}
       disabled={mut.isPending}

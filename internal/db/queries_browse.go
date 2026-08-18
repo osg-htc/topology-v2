@@ -159,8 +159,10 @@ type ResourceDetail struct {
 	Deleted         bool     `json:"deleted"`
 }
 
-// GetResourceDetail returns a single resource (active) with its parentage.
-func (q *Queries) GetResourceDetail(ctx context.Context, name string) (*ResourceDetail, error) {
+// GetResourceDetail returns a single resource (active), looked up by its
+// immutable topology_id rather than name -- a rename must never change what
+// URL/link reaches a resource.
+func (q *Queries) GetResourceDetail(ctx context.Context, topologyID int64) (*ResourceDetail, error) {
 	d := &ResourceDetail{}
 	err := q.pool.QueryRow(ctx,
 		`SELECT r.name, r.topology_id, rg.name, s.name, f.name, r.active,
@@ -170,7 +172,7 @@ func (q *Queries) GetResourceDetail(ctx context.Context, name string) (*Resource
 		 JOIN resource_groups rg ON rg.id = r.resource_group_id
 		 JOIN sites s ON s.id = rg.site_id
 		 JOIN facilities f ON f.id = s.facility_id
-		 WHERE r.name = $1 AND r.deleted_at IS NULL`, name).
+		 WHERE r.topology_id = $1 AND r.deleted_at IS NULL`, topologyID).
 		Scan(&d.Name, &d.TopologyID, &d.ResourceGroup, &d.Site, &d.Facility, &d.Active,
 			&d.Description, &d.FQDN, &d.DN, &d.FQDNAliases, &d.Tags, &d.AllowedVOs,
 			&d.VOOwnership, &d.WLCGInformation)
@@ -180,8 +182,9 @@ func (q *Queries) GetResourceDetail(ctx context.Context, name string) (*Resource
 	return d, nil
 }
 
-// ResourceIDForName returns the resource id (active) for contact/service lookups.
-func (q *Queries) ResourceIDForName(ctx context.Context, name string) (string, error) {
+// ResourceIDForName returns the resource's topology_id (active) for contact/
+// service lookups.
+func (q *Queries) ResourceIDForName(ctx context.Context, name string) (int64, error) {
 	return q.ResourceIDByName(ctx, name)
 }
 
@@ -525,35 +528,83 @@ func (q *Queries) SoftDeleteFacilityByName(ctx context.Context, name, byUser str
 	return err
 }
 
+// UpdateResourceFields updates a resource in place, keyed by its immutable
+// topology_id rather than name -- a rename must never change identity or
+// orphan resource_services/resource_contacts (both FK on resource_id =
+// resources.topology_id). Does not touch services/contacts; callers replace
+// those separately (see ReplaceResourceServices/ReplaceResourceContacts).
+func (q *Queries) UpdateResourceFields(ctx context.Context, r ResourceRow) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE resources SET resource_group_id=$2, name=$3, active=$4, description=$5,
+		    fqdn=$6, dn=$7, fqdn_aliases=$8, tags=$9, allowed_vos=$10, vo_ownership=$11,
+		    wlcg_information=$12, extra=$13, updated_at=NOW()
+		 WHERE topology_id=$1 AND deleted_at IS NULL`,
+		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, nullString(r.Description),
+		r.FQDN, nullString(r.DN), r.FQDNAliases, r.Tags, r.AllowedVOs,
+		nullBytes(r.VOOwnership), nullBytes(r.WLCGInformation), nullBytes(r.Extra))
+	return err
+}
+
+// ReplaceResourceServices sets the full Services set for a resource: hard-
+// deletes the current rows (resource_services has no deleted_at -- it is pure
+// child aggregate data, fully recomputed from each edit's payload) and lets
+// the caller re-insert via InsertResourceService.
+func (q *Queries) ReplaceResourceServices(ctx context.Context, resourceID int64) error {
+	_, err := q.pool.Exec(ctx, `DELETE FROM resource_services WHERE resource_id=$1`, resourceID)
+	return err
+}
+
+// ReplaceResourceContactsBegin soft-deletes a resource's current contact set,
+// mirroring ReplaceEntityContacts' pattern for resource_group/site/facility.
+// The caller re-inserts via InsertResourceContact.
+func (q *Queries) ReplaceResourceContactsBegin(ctx context.Context, resourceID int64, byUser string) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE resource_contacts SET deleted_at = NOW(), deleted_by = $2
+		 WHERE resource_id = $1 AND deleted_at IS NULL`,
+		resourceID, nullString(byUser))
+	return err
+}
+
 // UpdateResourceGroupFields updates a resource group in place (preserving its id
 // and child resources). Moving to a different site is supported via siteID.
-func (q *Queries) UpdateResourceGroupFields(ctx context.Context, name, siteID string, production *bool, supportCenter, groupDescription string) error {
+// UpdateResourceGroupFields updates a resource group in place, keyed by
+// targetName (its name before this edit) rather than the new name -- a
+// rename must locate the existing row by what it WAS called, not by what
+// it's being renamed TO (which, on a rename, doesn't exist yet and would
+// silently match zero rows).
+func (q *Queries) UpdateResourceGroupFields(ctx context.Context, targetName, newName, siteID string, production *bool, supportCenter, groupDescription string) error {
 	_, err := q.pool.Exec(ctx,
 		`UPDATE resource_groups
-		 SET site_id=$2, production=$3, support_center=$4, group_description=$5, updated_at=NOW()
+		 SET name=$2, site_id=$3, production=$4, support_center=$5, group_description=$6, updated_at=NOW()
 		 WHERE name=$1 AND deleted_at IS NULL`,
-		name, siteID, production, nullString(supportCenter), nullString(groupDescription))
+		targetName, newName, siteID, production, nullString(supportCenter), nullString(groupDescription))
 	return err
 }
 
 // UpdateSiteFields updates a site in place.
-func (q *Queries) UpdateSiteFields(ctx context.Context, r SiteRow) error {
+// UpdateSiteFields updates a site in place, keyed by targetName (its name
+// before this edit) -- r.Name is the new name, written into SET, not used for
+// the lookup. See UpdateResourceGroupFields for why.
+func (q *Queries) UpdateSiteFields(ctx context.Context, targetName string, r SiteRow) error {
 	_, err := q.pool.Exec(ctx,
-		`UPDATE sites SET facility_id=$2, long_name=$3, description=$4, address_line1=$5,
-		    address_line2=$6, city=$7, state=$8, country=$9, zipcode=$10, latitude=$11,
-		    longitude=$12, updated_at=NOW()
+		`UPDATE sites SET name=$2, facility_id=$3, long_name=$4, description=$5, address_line1=$6,
+		    address_line2=$7, city=$8, state=$9, country=$10, zipcode=$11, latitude=$12,
+		    longitude=$13, updated_at=NOW()
 		 WHERE name=$1 AND deleted_at IS NULL`,
-		r.Name, r.FacilityID, nullString(r.LongName), nullString(r.Description),
+		targetName, r.Name, r.FacilityID, nullString(r.LongName), nullString(r.Description),
 		nullString(r.AddressLine1), nullString(r.AddressLine2), nullString(r.City),
 		nullString(r.State), nullString(r.Country), nullString(r.Zipcode), r.Latitude, r.Longitude)
 	return err
 }
 
 // UpdateFacilityFields updates a facility in place.
-func (q *Queries) UpdateFacilityFields(ctx context.Context, name, institutionID string) error {
+// UpdateFacilityFields updates a facility in place, keyed by targetName (its
+// name before this edit) -- newName is written into SET, not used for the
+// lookup. See UpdateResourceGroupFields for why.
+func (q *Queries) UpdateFacilityFields(ctx context.Context, targetName, newName, institutionID string) error {
 	_, err := q.pool.Exec(ctx,
-		`UPDATE facilities SET institution_id=$2, updated_at=NOW()
+		`UPDATE facilities SET name=$2, institution_id=$3, updated_at=NOW()
 		 WHERE name=$1 AND deleted_at IS NULL`,
-		name, nullString(institutionID))
+		targetName, newName, nullString(institutionID))
 	return err
 }

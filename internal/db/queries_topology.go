@@ -53,8 +53,7 @@ type ResourceGroupRow struct {
 }
 
 type ResourceRow struct {
-	ID              string
-	TopologyID      int64
+	TopologyID      int64 // sole identifier -- see internal/topology/persist.go
 	ResourceGroupID string
 	RGName          string // populated on export
 	Name            string
@@ -72,7 +71,7 @@ type ResourceRow struct {
 }
 
 type ResourceServiceRow struct {
-	ResourceID  string
+	ResourceID  int64
 	ServiceName string
 	Description string
 	Details     []byte
@@ -80,7 +79,7 @@ type ResourceServiceRow struct {
 }
 
 type ResourceContactRow struct {
-	ResourceID  string
+	ResourceID  int64
 	ContactType string
 	Rank        string
 	ContactName string
@@ -92,14 +91,19 @@ type DowntimeRow struct {
 	RGID         string
 	RGName       string // populated on export
 	ResourceName string
-	Class        string
-	Severity     string
-	Description  string
-	StartTime    string
-	EndTime      string
-	CreatedTime  string
-	Services     []string
-	Ordinal      int
+	// ResourceID is nullable: a downtime whose ResourceName doesn't resolve to
+	// a live resource is a known, tolerated case (see migration 011's comment)
+	// -- nil rather than erroring keeps a single dangling reference from
+	// aborting an entire import.
+	ResourceID  *int64
+	Class       string
+	Severity    string
+	Description string
+	StartTime   string
+	EndTime     string
+	CreatedTime string
+	Services    []string
+	Ordinal     int
 }
 
 // ---- services & support centers ----
@@ -232,17 +236,30 @@ func (q *Queries) InsertResourceGroup(ctx context.Context, r ResourceGroupRow) (
 	return id, err
 }
 
-func (q *Queries) InsertResource(ctx context.Context, r ResourceRow) (string, error) {
-	var id string
-	err := q.pool.QueryRow(ctx,
+// InsertResource inserts a resource row. topology_id is the primary key and is
+// always supplied by the caller (see internal/topology/persist.go for the two
+// id-resolution policies) -- there is no separate surrogate key to RETURNING.
+func (q *Queries) InsertResource(ctx context.Context, r ResourceRow) error {
+	_, err := q.pool.Exec(ctx,
 		`INSERT INTO resources (topology_id, resource_group_id, name, active, description,
 		    fqdn, dn, fqdn_aliases, tags, allowed_vos, vo_ownership, wlcg_information,
 		    extra, id_explicit)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
 		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, nullString(r.Description),
 		r.FQDN, nullString(r.DN), r.FQDNAliases, r.Tags, r.AllowedVOs,
 		nullBytes(r.VOOwnership), nullBytes(r.WLCGInformation), nullBytes(r.Extra),
-		r.IDExplicit).Scan(&id)
+		r.IDExplicit)
+	return err
+}
+
+// NextAppCreatedResourceID mints an id for a resource created through the
+// change-proposal workflow with no explicit ID supplied. Draws from
+// resources_app_created_id_seq (seeded one past the highest id a human has
+// ever hand-assigned -- see migration 011), never from the name-hash formula
+// the importer uses, so the id a rename could never move it.
+func (q *Queries) NextAppCreatedResourceID(ctx context.Context) (int64, error) {
+	var id int64
+	err := q.pool.QueryRow(ctx, `SELECT nextval('resources_app_created_id_seq')`).Scan(&id)
 	return id, err
 }
 
@@ -268,10 +285,10 @@ func (q *Queries) InsertResourceContact(ctx context.Context, r ResourceContactRo
 
 func (q *Queries) InsertDowntime(ctx context.Context, r DowntimeRow) error {
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO downtimes (dt_id, resource_group_id, resource_name, class, severity,
-		    description, start_time, end_time, created_time, services, ordinal)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		r.DtID, r.RGID, r.ResourceName, r.Class, nullString(r.Severity),
+		`INSERT INTO downtimes (dt_id, resource_group_id, resource_name, resource_id, class,
+		    severity, description, start_time, end_time, created_time, services, ordinal)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		r.DtID, r.RGID, r.ResourceName, r.ResourceID, r.Class, nullString(r.Severity),
 		nullString(r.Description), r.StartTime, r.EndTime, nullString(r.CreatedTime),
 		r.Services, r.Ordinal)
 	return err
@@ -349,7 +366,7 @@ func (q *Queries) ListResourceGroups(ctx context.Context) ([]ResourceGroupRow, e
 
 func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT r.id, r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
+		`SELECT r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
 		        r.fqdn, COALESCE(r.dn,''), r.fqdn_aliases, r.tags, r.allowed_vos,
 		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit
 		 FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
@@ -361,7 +378,7 @@ func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 	var out []ResourceRow
 	for rows.Next() {
 		var r ResourceRow
-		if err := rows.Scan(&r.ID, &r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
+		if err := rows.Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
 			&r.FQDN, &r.DN, &r.FQDNAliases, &r.Tags, &r.AllowedVOs,
 			&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit); err != nil {
 			return nil, err
@@ -371,7 +388,7 @@ func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 	return out, rows.Err()
 }
 
-func (q *Queries) ListResourceServices(ctx context.Context, resourceID string) ([]ResourceServiceRow, error) {
+func (q *Queries) ListResourceServices(ctx context.Context, resourceID int64) ([]ResourceServiceRow, error) {
 	rows, err := q.pool.Query(ctx,
 		`SELECT service_name, COALESCE(description,''), details
 		 FROM resource_services WHERE resource_id = $1 ORDER BY ordinal, service_name`, resourceID)
@@ -390,7 +407,7 @@ func (q *Queries) ListResourceServices(ctx context.Context, resourceID string) (
 	return out, rows.Err()
 }
 
-func (q *Queries) ListResourceContacts(ctx context.Context, resourceID string) ([]ResourceContactRow, error) {
+func (q *Queries) ListResourceContacts(ctx context.Context, resourceID int64) ([]ResourceContactRow, error) {
 	rows, err := q.pool.Query(ctx,
 		`SELECT contact_type, rank, COALESCE(contact_name,''), COALESCE(contact_id,'')
 		 FROM resource_contacts WHERE resource_id = $1 AND deleted_at IS NULL`, resourceID)

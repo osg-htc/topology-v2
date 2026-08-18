@@ -33,8 +33,11 @@ type ServiceRow = { name: string; description: string };
 function NewResourceForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const editName = params.get("edit");
-  const [name, setName] = useState(editName ?? "");
+  const editParam = params.get("edit");
+  // A resource's edit target is its immutable topology_id, not its (mutable)
+  // name -- so a rename can never break the link or duplicate the row.
+  const editId = editParam != null ? Number(editParam) : null;
+  const [name, setName] = useState("");
   // In edit mode the resource group is fixed; in create mode ParentChainPicker
   // resolves the placement and any inline parent-creation operations.
   const [placement, setPlacement] = useState<Placement>({ rg: params.get("rg") ?? "", ops: [], valid: false });
@@ -58,9 +61,9 @@ function NewResourceForm() {
 
   // Edit mode: load the existing resource and prefill.
   const { data: editData } = useQuery({
-    queryKey: ["resource-detail", editName],
-    queryFn: () => api.resourceDetail(editName!),
-    enabled: !!editName,
+    queryKey: ["resource-detail", editId],
+    queryFn: () => api.resourceDetail(editId!),
+    enabled: editId != null,
   });
   useEffect(() => {
     if (!editData) return;
@@ -157,8 +160,8 @@ function NewResourceForm() {
       }
       const resourceOp: BundleOp = {
         entity_kind: "resource",
-        operation: editName ? "update" : "create",
-        target_name: editName ?? undefined,
+        operation: editId != null ? "update" : "create",
+        target_name: editId != null ? String(editId) : undefined,
         proposed_state: { name, resource_group: rg, resource },
       };
       // Onboarding invites for any brand-new contacts block approval until accepted.
@@ -200,7 +203,7 @@ function NewResourceForm() {
   return (
     <div className="p-8">
       <PageHeader
-        title={editName ? `Edit resource: ${editName}` : "Register a resource"}
+        title={editId != null ? `Edit resource: ${name || editId}` : "Register a resource"}
         description="Provide the resource's placement, host name, services, and contacts. At least one contact is required for a complete registration."
       />
       <div className="max-w-2xl space-y-6">
@@ -211,7 +214,7 @@ function NewResourceForm() {
               <label className={label}>Resource name</label>
               <input className={input + errCls(invalid.name)} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. UChicago_OSGConnect_ap20" />
             </div>
-            {editName ? (
+            {editId != null ? (
               <div>
                 <label className={label}>Resource group</label>
                 <input className={`${input} bg-gray-50 text-gray-500`} value={rg} disabled />

@@ -45,6 +45,7 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 	}
 
 	rgIDs := map[string]string{}
+	resIDs := map[string]int64{} // resource name -> topology_id, for downtime FK resolution below
 	for name, rg := range t.ResourceGroups {
 		siteName := t.RGSite[name]
 		topID, explicit := resolveID(rg.GroupID, name)
@@ -60,20 +61,26 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 		rgIDs[name] = id
 
 		for resName, res := range rg.Resources {
-			if _, err := UpsertResource(ctx, q, id, resName, res); err != nil {
+			resTopID, err := UpsertResource(ctx, q, id, resName, res)
+			if err != nil {
 				return err
 			}
+			resIDs[resName] = resTopID
 		}
 	}
 
 	for rgName, dts := range t.Downtimes {
 		rgID := rgIDs[rgName]
 		for i, d := range dts {
+			var resID *int64
+			if id, ok := resIDs[d.ResourceName]; ok {
+				resID = &id
+			}
 			if err := q.InsertDowntime(ctx, db.DowntimeRow{
-				DtID: d.ID, RGID: rgID, ResourceName: d.ResourceName, Class: d.Class,
-				Severity: d.Severity, Description: d.Description, StartTime: d.StartTime,
-				EndTime: d.EndTime, CreatedTime: d.CreatedTime, Services: d.Services,
-				Ordinal: i,
+				DtID: d.ID, RGID: rgID, ResourceName: d.ResourceName, ResourceID: resID,
+				Class: d.Class, Severity: d.Severity, Description: d.Description,
+				StartTime: d.StartTime, EndTime: d.EndTime, CreatedTime: d.CreatedTime,
+				Services: d.Services, Ordinal: i,
 			}); err != nil {
 				return fmt.Errorf("insert downtime %d: %w", d.ID, err)
 			}
@@ -171,44 +178,113 @@ func ImportTree(ctx context.Context, q *db.Queries, root string) error {
 }
 
 // UpsertResource inserts a resource (with its services and contact lists) under
-// the given resource-group id. Reused by both the bulk importer and the
-// change-proposal apply path so their behavior stays identical. A nil res.ID
-// falls back to gen_id (id_explicit=false), the correct behavior for a new
-// registration.
-func UpsertResource(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource) (string, error) {
+// the given resource-group id, for the bulk importer only (Import, above). A
+// nil res.ID falls back to v1's exact name-hash formula (id_explicit=false),
+// needed so a re-import stays byte-parity with v1's <ID> output. Proposal-
+// driven resource creation uses CreateResourceFromProposal instead, which
+// never derives an id from the name -- see that function's doc for why.
+func UpsertResource(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource) (int64, error) {
 	topID, explicit := resolveID(res.ID, resName)
-	resID, err := q.InsertResource(ctx, db.ResourceRow{
+	if err := insertResourceRow(ctx, q, rgID, resName, res, topID, explicit); err != nil {
+		return 0, err
+	}
+	return topID, nil
+}
+
+// CreateResourceFromProposal inserts a brand-new resource created through the
+// change-proposal workflow. Unlike the importer, an omitted ID is never
+// derived from the name -- doing so would make topology_id (the resource's
+// now-immutable primary key and the foreign key resource_services/
+// resource_contacts/downtimes point at) drift if the resource were ever
+// renamed, defeating the entire purpose of making it the key. Instead it
+// draws from resources_app_created_id_seq, a real Postgres sequence seeded
+// one past the highest id a human has ever hand-assigned (see migration
+// 011_resources_topology_id_pk.sql), reimplementing bin/next_resource_id's
+// own convention as a safe, atomic mechanism. The assigned id is always
+// explicit, so a future export writes it into the YAML and it survives a
+// backup/restore round-trip.
+func CreateResourceFromProposal(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource) (int64, error) {
+	topID := int64(0)
+	if res.ID != nil {
+		topID = *res.ID
+	} else {
+		id, err := q.NextAppCreatedResourceID(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("mint resource id for %q: %w", resName, err)
+		}
+		topID = id
+	}
+	if err := insertResourceRow(ctx, q, rgID, resName, res, topID, true); err != nil {
+		return 0, err
+	}
+	return topID, nil
+}
+
+// UpdateResourceFromProposal updates an existing resource in place, keyed by
+// its immutable topology_id -- never by name, since the whole point of this
+// id is that a rename must not change it or orphan its children. Replaces the
+// full Services/ContactLists set from the payload, matching what the old
+// insert-based update path did (a proposal's payload is the resource's
+// complete desired state, not a diff).
+func UpdateResourceFromProposal(ctx context.Context, q *db.Queries, topID int64, rgID, resName string, res *Resource, actorID string) error {
+	if err := q.UpdateResourceFields(ctx, db.ResourceRow{
+		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
+		Active: res.Active, Description: res.Description, FQDN: res.FQDN,
+		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
+		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
+		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
+	}); err != nil {
+		return fmt.Errorf("update resource %d: %w", topID, err)
+	}
+	if err := q.ReplaceResourceServices(ctx, topID); err != nil {
+		return fmt.Errorf("clear services for resource %d: %w", topID, err)
+	}
+	if err := q.ReplaceResourceContactsBegin(ctx, topID, actorID); err != nil {
+		return fmt.Errorf("clear contacts for resource %d: %w", topID, err)
+	}
+	return insertResourceChildren(ctx, q, topID, res)
+}
+
+// insertResourceRow inserts the resources row itself, then its children.
+func insertResourceRow(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource, topID int64, explicit bool) error {
+	if err := q.InsertResource(ctx, db.ResourceRow{
 		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
 		Active: res.Active, Description: res.Description, FQDN: res.FQDN,
 		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
 		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
 		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
 		IDExplicit: explicit,
-	})
-	if err != nil {
-		return "", fmt.Errorf("insert resource %q: %w", resName, err)
+	}); err != nil {
+		return fmt.Errorf("insert resource %q: %w", resName, err)
 	}
+	return insertResourceChildren(ctx, q, topID, res)
+}
+
+// insertResourceChildren inserts a resource's Services and ContactLists.
+// Shared by the create path (fresh row, no prior children) and the update
+// path (called after the prior children have been cleared).
+func insertResourceChildren(ctx context.Context, q *db.Queries, topID int64, res *Resource) error {
 	ord := 0
 	for svcName, svc := range res.Services {
 		if err := q.InsertResourceService(ctx, db.ResourceServiceRow{
-			ResourceID: resID, ServiceName: svcName, Description: svc.Description,
+			ResourceID: topID, ServiceName: svcName, Description: svc.Description,
 			Details: mustJSONAny(svcBlob{Details: svc.Details, Extra: svc.Extra}), Ordinal: ord,
 		}); err != nil {
-			return "", fmt.Errorf("insert service %q: %w", svcName, err)
+			return fmt.Errorf("insert service %q: %w", svcName, err)
 		}
 		ord++
 	}
 	for ctype, ranks := range res.ContactLists {
 		for rank, contact := range ranks {
 			if err := q.InsertResourceContact(ctx, db.ResourceContactRow{
-				ResourceID: resID, ContactType: ctype, Rank: rank,
+				ResourceID: topID, ContactType: ctype, Rank: rank,
 				ContactName: contact.Name, ContactID: contact.ID,
 			}); err != nil {
-				return "", fmt.Errorf("insert contact: %w", err)
+				return fmt.Errorf("insert contact: %w", err)
 			}
 		}
 	}
-	return resID, nil
+	return nil
 }
 
 // ExportFullToDir writes the entire topology domain (tree + services.yaml +
@@ -315,7 +391,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 			WLCGInformation: fromJSONAny(r.WLCGInformation), Extra: fromJSON(r.Extra),
 		}
 		// Services.
-		svcs, err := q.ListResourceServices(ctx, r.ID)
+		svcs, err := q.ListResourceServices(ctx, r.TopologyID)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +402,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 			}
 		}
 		// Contacts.
-		contacts, err := q.ListResourceContacts(ctx, r.ID)
+		contacts, err := q.ListResourceContacts(ctx, r.TopologyID)
 		if err != nil {
 			return nil, err
 		}

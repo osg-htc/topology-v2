@@ -41,9 +41,11 @@ function nameOf(kind: string, state: AnyRec, fallback?: string): string {
 }
 
 // oneOp summarizes a single operation (used for both standalone and bundled).
+// nameOf already prefers a name found in the payload over the raw target
+// (which, for a resource, is now an immutable id rather than a name).
 function oneOp(kind: string, operation: string, state: AnyRec, targetName?: string): string {
   const verb = operation === "create" ? "Create" : operation === "delete" ? "Delete" : "Update";
-  const name = operation === "delete" ? (targetName ?? nameOf(kind, state)) : nameOf(kind, state, targetName);
+  const name = nameOf(kind, state, targetName);
   return `${verb} ${kindLabel(kind).toLowerCase()} “${name}”`;
 }
 
@@ -72,7 +74,11 @@ export function proposalSummary(p: ProposalLike): ProposalSummary {
   }
 
   if (p.operation === "delete") {
-    return { kind: p.entity_kind, title: p.target_name ?? "—", changes: [oneOp(p.entity_kind, "delete", state, p.target_name)] };
+    // For a resource, target_name is now the immutable id, not a name -- a
+    // delete payload carries an optional {name} purely for display (see
+    // DeleteButton in entityActions.tsx), preferred here when present.
+    const title = nameOf(p.entity_kind, state, p.target_name);
+    return { kind: p.entity_kind, title, changes: [oneOp(p.entity_kind, "delete", state, p.target_name)] };
   }
 
   const title = nameOf(p.entity_kind, state, p.target_name);
