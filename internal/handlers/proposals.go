@@ -255,6 +255,24 @@ func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, p)
 }
 
+// ListProposalsByEntityHandler lists every non-draft proposal that has
+// targeted a given entity (e.g. a resource's history of edits), via
+// ?entity_kind=&target_name=.
+func (h *Handler) ListProposalsByEntityHandler(w http.ResponseWriter, r *http.Request) {
+	entityKind := r.URL.Query().Get("entity_kind")
+	targetName := r.URL.Query().Get("target_name")
+	if entityKind == "" || targetName == "" {
+		respondError(w, http.StatusBadRequest, "entity_kind and target_name are required")
+		return
+	}
+	ps, err := h.queries.ListProposalsByEntity(r.Context(), entityKind, targetName)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "loading proposals")
+		return
+	}
+	respondJSON(w, http.StatusOK, ps)
+}
+
 // ListMyProposals lists the current user's proposals.
 func (h *Handler) ListMyProposals(w http.ResponseWriter, r *http.Request) {
 	ps, err := h.queries.ListProposalsByCreator(r.Context(), h.currentUser(r).ID)
@@ -695,8 +713,16 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 		}
 		return topology.UpdateResourceFromProposal(ctx, q, topID, rgID, rp.Name, &rp.Resource, actorID)
 	}
-	_, err = topology.CreateResourceFromProposal(ctx, q, rgID, rp.Name, &rp.Resource)
-	return err
+	topID, err := topology.CreateResourceFromProposal(ctx, q, rgID, rp.Name, &rp.Resource)
+	if err != nil {
+		return err
+	}
+	// Backfill target_name now that the resource has a real id -- otherwise
+	// this proposal (the resource's own creation) could never be found by a
+	// later ListProposalsByEntity(resource, topID) lookup. q is already the
+	// tx-bound Queries from ApproveProposal's WithTx, so this is atomic with
+	// the resource's creation.
+	return q.UpdateProposalTargetName(ctx, p.ID, strconv.FormatInt(topID, 10))
 }
 
 // snapshotResource captures the current resource state as base_version.

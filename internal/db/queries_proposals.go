@@ -166,6 +166,27 @@ func (q *Queries) ListPendingProposals(ctx context.Context) ([]*models.Proposal,
 		`SELECT `+proposalCols+` FROM change_proposals WHERE status = 'pending' ORDER BY updated_at ASC`)
 }
 
+// ListProposalsByEntity returns an entity's actual edit history: proposals
+// that are pending or have taken effect. Drafts, rejected, and withdrawn
+// proposals are excluded -- a draft may be another user's private
+// in-progress edit, and a rejected/withdrawn proposal never actually
+// changed the entity, so none of the three belong in "what happened to
+// this entity" history.
+func (q *Queries) ListProposalsByEntity(ctx context.Context, entityKind, targetName string) ([]*models.Proposal, error) {
+	return q.listProposals(ctx,
+		`SELECT `+proposalCols+` FROM change_proposals
+		 WHERE entity_kind = $1 AND target_name = $2 AND status IN ('pending', 'applied')
+		 ORDER BY updated_at DESC`, entityKind, targetName)
+}
+
+// UpdateProposalTargetName backfills target_name once a create proposal's
+// entity has minted a real id (resources only, today -- see
+// applyResourceProposal's OpCreate branch).
+func (q *Queries) UpdateProposalTargetName(ctx context.Context, proposalID, targetName string) error {
+	_, err := q.pool.Exec(ctx, `UPDATE change_proposals SET target_name = $2 WHERE id = $1`, proposalID, targetName)
+	return err
+}
+
 func (q *Queries) listProposals(ctx context.Context, sql string, args ...any) ([]*models.Proposal, error) {
 	rows, err := q.pool.Query(ctx, sql, args...)
 	if err != nil {

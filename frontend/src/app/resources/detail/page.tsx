@@ -10,6 +10,7 @@ import { DetailField } from "@/components/DetailField";
 import { DowntimesTable } from "@/components/DowntimesTable";
 import { InviteContactButton } from "@/components/InviteContactButton";
 import { ContactReplaceActions } from "@/components/ContactReplaceActions";
+import { EntityProposalHistory } from "@/components/EntityProposalHistory";
 
 function ResourceDetailView() {
   const idParam = useSearchParams().get("id");
@@ -186,6 +187,7 @@ function ResourceDetailView() {
               </div>
             </div>
           </Card>
+          <EntityProposalHistory entityKind="resource" targetName={String(r.id)} />
           {r.vo_ownership != null && (
             <Card>
               <h3 className="mb-2 text-sm font-semibold text-gray-700">VO ownership</h3>

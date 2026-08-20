@@ -74,6 +74,7 @@ export interface Proposal {
   proposed_state: unknown;
   schema_version: number;
   created_by: string;
+  assigned_reviewer?: string;
   review_note?: string;
   created_at: string;
   updated_at: string;
@@ -158,6 +159,10 @@ export const api = {
   proposals: {
     mine: () => fetchJSON<Proposal[]>("/proposals/mine"),
     pending: () => fetchJSON<Proposal[]>("/proposals/pending"),
+    byEntity: (entityKind: string, targetName: string) =>
+      fetchJSON<Proposal[]>(
+        `/proposals?entity_kind=${encodeURIComponent(entityKind)}&target_name=${encodeURIComponent(targetName)}`,
+      ),
     get: (id: string) => fetchJSON<Proposal>(`/proposals/${id}`),
     create: (body: unknown) =>
       fetchJSON<{ id: string; status: string }>("/proposals", {

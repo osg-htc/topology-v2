@@ -119,6 +119,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 
 			r.Route("/proposals", func(r chi.Router) {
 				r.Post("/", h.CreateProposal)
+				r.Get("/", h.ListProposalsByEntityHandler)
 				r.Get("/mine", h.ListMyProposals)
 				r.Get("/pending", h.ListPendingProposals)
 				r.Get("/{id}", h.GetProposal)
