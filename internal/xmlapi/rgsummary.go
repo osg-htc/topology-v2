@@ -6,6 +6,10 @@ package xmlapi
 
 import (
 	"context"
+	"encoding/json"
+	"encoding/xml"
+	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,7 +107,7 @@ type ResourceXML struct {
 	FQDN         string          `xml:"FQDN"`
 	FQDNAliases  FQDNAliasesXML  `xml:"FQDNAliases"`
 	VOOwnership  VOOwnershipXML  `xml:"VOOwnership"`
-	WLCG         WLCGXML         `xml:"WLCGInformation"`
+	WLCG         wlcgInfoXML     `xml:"WLCGInformation"`
 	ContactLists ContactListsXML `xml:"ContactLists"`
 	IsCCStar     bool            `xml:"IsCCStar"`
 }
@@ -112,11 +116,52 @@ type ServicesXML struct {
 	Services []ServiceXML `xml:"Service"`
 }
 type ServiceXML struct {
-	ID          int64  `xml:"ID"`
-	Name        string `xml:"Name"`
-	Description string `xml:"Description"`
-	Details     string `xml:"Details"`
+	ID          int64      `xml:"ID"`
+	Name        string     `xml:"Name"`
+	Description string     `xml:"Description"`
+	Details     detailsXML `xml:"Details"`
 }
+
+// detailsXML renders a service's Details as whatever nested elements the
+// stored map holds (e.g. {"hidden": true} -> <Details><hidden>true</hidden></Details>),
+// matching v1's behavior of blindly recursing an arbitrary YAML dict into XML
+// (webapp/common.py's xmltodict.unparse) rather than a fixed schema.
+type detailsXML map[string]interface{}
+
+func (d detailsXML) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	if len(d) == 0 {
+		return e.EncodeElement(struct{}{}, start)
+	}
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(d))
+	for k := range d {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if err := e.EncodeElement(toXMLValue(d[k]), xml.StartElement{Name: xml.Name{Local: k}}); err != nil {
+			return err
+		}
+	}
+	return e.EncodeToken(start.End())
+}
+
+// toXMLValue recursively wraps nested maps as detailsXML so arbitrarily deep
+// Details content nests correctly; scalars pass through as-is (encoding/xml
+// already renders bool as lowercase true/false, matching v1).
+func toXMLValue(v interface{}) interface{} {
+	if m, ok := v.(map[string]interface{}); ok {
+		out := make(detailsXML, len(m))
+		for k, vv := range m {
+			out[k] = toXMLValue(vv)
+		}
+		return out
+	}
+	return v
+}
+
 type TagsXML struct {
 	Tags []string `xml:"Tag"`
 }
@@ -152,6 +197,22 @@ type WLCGXML struct {
 	APELNormalFactor     *string  `xml:"APELNormalFactor,omitempty"`
 	HEPScore23Percentage *float64 `xml:"HEPScore23Percentage,omitempty"`
 	TapeCapacity         *string  `xml:"TapeCapacity,omitempty"`
+}
+
+// wlcgInfoXML renders <WLCGInformation>: the literal placeholder text
+// "(Information not available)" when a resource has no real WLCG data
+// (matching v1's default, webapp/topology.py's `defaults` dict), or the
+// structured WLCGXML fields when it does.
+type wlcgInfoXML struct {
+	Placeholder string
+	Data        *WLCGXML
+}
+
+func (w wlcgInfoXML) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	if w.Data == nil {
+		return e.EncodeElement(w.Placeholder, start)
+	}
+	return e.EncodeElement(*w.Data, start)
 }
 
 type ContactListsXML struct {
@@ -314,7 +375,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 			if !idAny(f.ServiceIDs) && f.ServiceIDs[id] {
 				matchedService = true
 			}
-			svcXMLs = append(svcXMLs, ServiceXML{ID: id, Name: s.ServiceName, Description: s.Description})
+			svcXMLs = append(svcXMLs, ServiceXML{ID: id, Name: s.ServiceName, Description: s.Description, Details: serviceDetailsXML(s.Details)})
 		}
 
 		isCC := false
@@ -331,7 +392,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 			Tags:         TagsXML{Tags: r.Tags},
 			FQDNAliases:  FQDNAliasesXML{Aliases: r.FQDNAliases},
 			VOOwnership:  voOwnershipXML(r.VOOwnership),
-			WLCG:         wlcgXML(r.WLCGInformation),
+			WLCG:         wlcgInfoFromStored(r.WLCGInformation),
 			ContactLists: buildContactLists(ctx, q, enc, r.TopologyID, includePII),
 			IsCCStar:     isCC,
 		}
@@ -341,6 +402,22 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 		out = append(out, rx)
 	}
 	return out, ccstar, matchedService
+}
+
+// serviceDetailsXML extracts a service's Details from its stored blob
+// (internal/topology/persist.go's svcBlob: {"details": {...}, "extra": {...}})
+// -- only the "details" key is rendered here, matching v1's <Details> element.
+func serviceDetailsXML(blob []byte) detailsXML {
+	if len(blob) == 0 {
+		return nil
+	}
+	var wrapper struct {
+		Details map[string]interface{} `json:"details"`
+	}
+	if err := json.Unmarshal(blob, &wrapper); err != nil {
+		return nil
+	}
+	return detailsXML(wrapper.Details)
 }
 
 func voOwnershipXML(v []byte) VOOwnershipXML {
@@ -357,9 +434,52 @@ func voOwnershipXML(v []byte) VOOwnershipXML {
 	for _, vo := range vos {
 		x.Ownership = append(x.Ownership, OwnershipXML{Percent: toInt(m[vo]), VO: vo})
 	}
-	empty := ""
-	x.ChartURL = &empty
+	chart := voOwnershipChartURL(vos, m)
+	x.ChartURL = &chart
 	return x
+}
+
+// voOwnershipChartURL replicates v1's Google Charts pie-chart URL exactly
+// (webapp/topology.py's _get_charturl): a single fixed color for every slice,
+// computed from the resource's raw VOOwnership percentages -- note v1 has a
+// quirk where this is built from the *un-padded* ownership map, so a
+// synthetic "(Other)" slice added elsewhere for percentages summing under
+// 100 is deliberately excluded here too, to match.
+func voOwnershipChartURL(vos []string, m map[string]interface{}) string {
+	chd := make([]string, 0, len(vos))
+	chl := make([]string, 0, len(vos))
+	for _, vo := range vos {
+		percent := toInt(m[vo])
+		name := vo
+		if name == "(Other)" {
+			name = "Other"
+		}
+		chd = append(chd, strconv.Itoa(percent))
+		chl = append(chl, fmt.Sprintf("%d(%s%%)", percent, name))
+	}
+	// Built by hand, in this literal parameter order, rather than via
+	// url.Values.Encode() (which sorts keys alphabetically) -- v1's Python
+	// dict preserves insertion order, and the query string's parameter order
+	// is part of the value being compared for parity, even though it has no
+	// functional effect on the resulting chart.
+	params := []struct{ key, val string }{
+		{"chco", "00cc00"},
+		{"cht", "p3"},
+		{"chd", "t:" + strings.Join(chd, ",")},
+		{"chs", "280x65"},
+		{"chl", strings.Join(chl, "|")},
+	}
+	var b strings.Builder
+	b.WriteString("http://chart.apis.google.com/chart?")
+	for i, p := range params {
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(p.key)
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(p.val))
+	}
+	return b.String()
 }
 
 func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, resourceID int64, includePII bool) ContactListsXML {
@@ -392,6 +512,17 @@ func buildContactLists(ctx context.Context, q *db.Queries, enc *crypto.Encryptor
 		})
 	}
 	return out
+}
+
+// wlcgInfoFromStored builds the wlcgInfoXML wrapper from the stored map: the
+// "(Information not available)" placeholder when empty (matching v1), or the
+// structured fields when real WLCG data is present.
+func wlcgInfoFromStored(v []byte) wlcgInfoXML {
+	if len(parseJSONMap(v)) == 0 {
+		return wlcgInfoXML{Placeholder: "(Information not available)"}
+	}
+	data := wlcgXML(v)
+	return wlcgInfoXML{Data: &data}
 }
 
 // wlcgXML builds the WLCGInformation element from the stored map. An empty map
