@@ -116,3 +116,75 @@ func (q *Queries) ListProjects(ctx context.Context) ([]ProjectRow, error) {
 	}
 	return out, rows.Err()
 }
+
+// ReportingGroupRow is one entry in the shared reporting-groups registry
+// (imported from virtual-organizations/REPORTING_GROUPS.yaml), cross-
+// referenced by name from a VO's ReportingGroups list.
+type ReportingGroupRow struct {
+	Name     string
+	Contacts []byte // JSON array of {ID, Name}
+	FQANs    []byte // JSON array of {GroupName, Role}
+}
+
+// UpsertReportingGroup inserts or replaces one reporting group by name.
+func (q *Queries) UpsertReportingGroup(ctx context.Context, name string, contacts, fqans []byte) error {
+	_, err := q.pool.Exec(ctx,
+		`INSERT INTO reporting_groups (name, contacts, fqans)
+		 VALUES ($1,$2,$3)
+		 ON CONFLICT (name) DO UPDATE SET contacts=$2, fqans=$3, updated_at=NOW()`,
+		name, nullBytes(contacts), nullBytes(fqans))
+	return err
+}
+
+// ListReportingGroups returns the full reporting-groups registry.
+func (q *Queries) ListReportingGroups(ctx context.Context) ([]ReportingGroupRow, error) {
+	rows, err := q.pool.Query(ctx, `SELECT name, contacts, fqans FROM reporting_groups ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ReportingGroupRow
+	for rows.Next() {
+		var r ReportingGroupRow
+		if err := rows.Scan(&r.Name, &r.Contacts, &r.FQANs); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// CampusGridRow is one entry in the shared campus-grid sponsor registry
+// (imported from projects/_CAMPUS_GRIDS.yaml), cross-referenced by name from
+// a project's Sponsor.CampusGrid.
+type CampusGridRow struct {
+	Name         string
+	CampusGridID int64
+}
+
+// UpsertCampusGrid inserts or replaces one campus grid by name.
+func (q *Queries) UpsertCampusGrid(ctx context.Context, name string, id int64) error {
+	_, err := q.pool.Exec(ctx,
+		`INSERT INTO campus_grids (name, campus_grid_id) VALUES ($1,$2)
+		 ON CONFLICT (name) DO UPDATE SET campus_grid_id=$2, updated_at=NOW()`,
+		name, id)
+	return err
+}
+
+// ListCampusGrids returns the full campus-grid registry.
+func (q *Queries) ListCampusGrids(ctx context.Context) ([]CampusGridRow, error) {
+	rows, err := q.pool.Query(ctx, `SELECT name, campus_grid_id FROM campus_grids ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CampusGridRow
+	for rows.Next() {
+		var r CampusGridRow
+		if err := rows.Scan(&r.Name, &r.CampusGridID); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

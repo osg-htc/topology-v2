@@ -127,7 +127,13 @@ func ImportRepo(ctx context.Context, q *db.Queries, repoRoot string) error {
 	if err := ImportVOs(ctx, q, voDir); err != nil {
 		return err
 	}
-	return ImportProjects(ctx, q, projDir)
+	if err := ImportReportingGroups(ctx, q, voDir); err != nil {
+		return err
+	}
+	if err := ImportProjects(ctx, q, projDir); err != nil {
+		return err
+	}
+	return ImportCampusGrids(ctx, q, projDir)
 }
 
 // ExportRepoToDir writes the full repository layout (topology/ + flat files,

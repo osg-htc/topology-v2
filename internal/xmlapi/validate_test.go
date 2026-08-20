@@ -42,8 +42,14 @@ func TestXMLValidatesAgainstXSD(t *testing.T) {
 		if err := topology.ImportVOs(ctx, q, filepath.Join(repo, "virtual-organizations")); err != nil {
 			t.Fatalf("ImportVOs: %v", err)
 		}
+		if err := topology.ImportReportingGroups(ctx, q, filepath.Join(repo, "virtual-organizations")); err != nil {
+			t.Fatalf("ImportReportingGroups: %v", err)
+		}
 		if err := topology.ImportProjects(ctx, q, filepath.Join(repo, "projects")); err != nil {
 			t.Fatalf("ImportProjects: %v", err)
+		}
+		if err := topology.ImportCampusGrids(ctx, q, filepath.Join(repo, "projects")); err != nil {
+			t.Fatalf("ImportCampusGrids: %v", err)
 		}
 	}
 
@@ -61,7 +67,7 @@ func TestXMLValidatesAgainstXSD(t *testing.T) {
 
 	// The VOSummary/Projects XSDs require at least one VO/Project, so only
 	// validate when data was imported (i.e. a repo root was supplied).
-	vos, err := xmlapi.BuildVOSummary(ctx, q)
+	vos, err := xmlapi.BuildVOSummary(ctx, q, false)
 	if err != nil {
 		t.Fatalf("BuildVOSummary: %v", err)
 	}

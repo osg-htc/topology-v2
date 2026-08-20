@@ -39,11 +39,11 @@ func TestParity_ResourceGroup446(t *testing.T) {
 		t.Fatalf("fetch v2: %v", err)
 	}
 
-	v1Group, err := findGroupByID(v1Tree, targetGroupID)
+	v1Group, err := findByChildText(v1Tree, "ResourceGroup", "GroupID", targetGroupID)
 	if err != nil {
 		t.Fatalf("v1: %v", err)
 	}
-	v2Group, err := findGroupByID(v2Tree, targetGroupID)
+	v2Group, err := findByChildText(v2Tree, "ResourceGroup", "GroupID", targetGroupID)
 	if err != nil {
 		t.Fatalf("v2: %v", err)
 	}
@@ -73,24 +73,4 @@ func fetchXMLTree(url string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("GET %s: status %d: %s", url, resp.StatusCode, truncate(string(body), 500))
 	}
 	return decodeXML(resp.Body)
-}
-
-// findGroupByID locates the <ResourceGroup> whose <GroupID> text equals id.
-func findGroupByID(root map[string]interface{}, id string) (map[string]interface{}, error) {
-	groups, _ := root["ResourceGroup"].([]interface{})
-	for _, g := range groups {
-		gm, ok := g.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		gids, _ := gm["GroupID"].([]interface{})
-		if len(gids) != 1 {
-			continue
-		}
-		gidNode, _ := gids[0].(map[string]interface{})
-		if gidNode["#text"] == id {
-			return gm, nil
-		}
-	}
-	return nil, fmt.Errorf("no ResourceGroup with GroupID=%s found (root had %d groups)", id, len(groups))
 }

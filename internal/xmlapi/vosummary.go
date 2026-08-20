@@ -2,6 +2,7 @@ package xmlapi
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -50,7 +51,19 @@ type ParentVOXML struct {
 	Name string `xml:"Name,omitempty"`
 }
 type ReportingGroupsXML struct {
-	Groups []struct{} `xml:"ReportingGroup"`
+	Groups []ReportingGroupXML `xml:"ReportingGroup"`
+}
+type ReportingGroupXML struct {
+	Name     string        `xml:"Name"`
+	FQANs    FQANsXML      `xml:"FQANs"`
+	Contacts VOContactsXML `xml:"Contacts"`
+}
+type FQANsXML struct {
+	FQANs []FQANXML `xml:"FQAN"`
+}
+type FQANXML struct {
+	GroupName string `xml:"GroupName"`
+	Role      string `xml:"Role"`
 }
 type ContactTypesXML struct {
 	Types []ContactTypeXML `xml:"ContactType"`
@@ -79,8 +92,11 @@ type ManagersXML struct {
 	Managers []ManagerXML `xml:"Manager"`
 }
 type ManagerXML struct {
-	Name      string `xml:"Name"`
-	CILogonID string `xml:"CILogonID,omitempty"`
+	Name string `xml:"Name"`
+	// No omitempty: v1 always emits this element, defaulting to empty when
+	// no matching contact resolves to a cilogon_id (webapp/vos_data.py's
+	// _expand_oasis_managers initializes it to None, not absent).
+	CILogonID string `xml:"CILogonID"`
 	DNs       DNsXML `xml:"DNs"`
 }
 type DNsXML struct {
@@ -103,10 +119,18 @@ type TokenIssuerXML struct {
 }
 
 // BuildVOSummary assembles /vosummary/xml from the stored VO documents.
-func BuildVOSummary(ctx context.Context, q *db.Queries) (*VOSummary, error) {
+func BuildVOSummary(ctx context.Context, q *db.Queries, includePII bool) (*VOSummary, error) {
 	vos, err := q.ListVOs(ctx)
 	if err != nil {
 		return nil, err
+	}
+	rgRows, err := q.ListReportingGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rgByName := make(map[string]db.ReportingGroupRow, len(rgRows))
+	for _, r := range rgRows {
+		rgByName[r.Name] = r
 	}
 	out := &VOSummary{
 		XsiNS:          "http://www.w3.org/2001/XMLSchema-instance",
@@ -131,9 +155,10 @@ func BuildVOSummary(ctx context.Context, q *db.Queries) (*VOSummary, error) {
 			Community:             mstr(m, "Community"),
 			FieldsOfScience:       fieldsOfScienceXML(m["FieldsOfScience"]),
 			ParentVO:              ParentVOXML{Name: mstr(m, "ParentVO")},
+			ReportingGroups:       reportingGroupsXML(stringList(m["ReportingGroups"]), rgByName),
 			Active:                !v.Disable,
 			Disable:               v.Disable,
-			ContactTypes:          voContactTypesXML(m["Contacts"]),
+			ContactTypes:          voContactTypesXML(m["Contacts"], includePII),
 			OASIS:                 oasisXML(m["OASIS"]),
 			Credentials:           credentialsXML(m["Credentials"]),
 		}
@@ -160,7 +185,7 @@ func fieldsOfScienceXML(v interface{}) *FieldsOfScienceXML {
 	return x
 }
 
-func voContactTypesXML(v interface{}) ContactTypesXML {
+func voContactTypesXML(v interface{}, includePII bool) ContactTypesXML {
 	m, ok := v.(map[string]interface{})
 	out := ContactTypesXML{}
 	if !ok {
@@ -179,12 +204,65 @@ func voContactTypesXML(v interface{}) ContactTypesXML {
 				continue
 			}
 			c := VOContactXML{Name: getStr(cm, "Name")}
-			if id := getStr(cm, "ID"); len(id) >= 3 && id[:3] == "OSG" {
+			// Matches the same includePII gate used for resource contacts
+			// (internal/handlers/topology_api.go's includePII) -- contact
+			// ids are only exposed to a contact_reader session, not
+			// anonymous/unprivileged clients.
+			if id := getStr(cm, "ID"); includePII && len(id) >= 3 && id[:3] == "OSG" {
 				c.CILogonID = id
 			}
 			ct.Contacts.Contacts = append(ct.Contacts.Contacts, c)
 		}
 		out.Types = append(out.Types, ct)
+	}
+	return out
+}
+
+// reportingGroupJSONContact/reportingGroupJSONFQAN mirror the JSON shape
+// UpsertReportingGroup stores (internal/topology/vos.go's
+// reportingGroupContact/reportingGroupFQAN).
+type reportingGroupJSONContact struct {
+	ID   string `json:"ID"`
+	Name string `json:"Name"`
+}
+type reportingGroupJSONFQAN struct {
+	GroupName string `json:"GroupName"`
+	Role      string `json:"Role"`
+}
+
+// reportingGroupsXML expands a VO's ReportingGroups (a plain list of names)
+// into the full registry-backed structure, matching v1's
+// _expand_reporting_groups: reporting-group contacts never carry a
+// CILogonID (only Name -- v1 also shows Email/Phone/SMSAddress when
+// authorized, not reproduced here since no contact-details registry is
+// imported for reporting groups yet).
+func reportingGroupsXML(names []string, registry map[string]db.ReportingGroupRow) ReportingGroupsXML {
+	out := ReportingGroupsXML{}
+	sortedNames := append([]string(nil), names...)
+	sort.Strings(sortedNames)
+	for _, name := range sortedNames {
+		row, ok := registry[name]
+		if !ok {
+			continue
+		}
+		rg := ReportingGroupXML{Name: name}
+		if len(row.Contacts) > 0 {
+			var contacts []reportingGroupJSONContact
+			if err := json.Unmarshal(row.Contacts, &contacts); err == nil {
+				for _, c := range contacts {
+					rg.Contacts.Contacts = append(rg.Contacts.Contacts, VOContactXML{Name: c.Name})
+				}
+			}
+		}
+		if len(row.FQANs) > 0 {
+			var fqans []reportingGroupJSONFQAN
+			if err := json.Unmarshal(row.FQANs, &fqans); err == nil {
+				for _, f := range fqans {
+					rg.FQANs.FQANs = append(rg.FQANs.FQANs, FQANXML{GroupName: f.GroupName, Role: f.Role})
+				}
+			}
+		}
+		out.Groups = append(out.Groups, rg)
 	}
 	return out
 }

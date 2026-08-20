@@ -36,6 +36,14 @@ type Filters struct {
 	GridTypeProd bool // include production
 	GridTypeITB  bool // include ITB
 	HasWLCG      bool
+
+	// PastDays gates which past-bucket downtimes BuildDowntimes includes,
+	// matching v1's `downtime_attrs_showpast` (webapp/common.py's
+	// Filters.past_days). Zero value (0) is v1's own default: no past
+	// downtime is shown unless explicitly requested. -1 means "all,
+	// unbounded"; a positive N means "past downtimes whose end_time is
+	// within the last N days". Current/future downtimes are never affected.
+	PastDays int
 }
 
 // empty reports whether a filter set is unset (matches everything).

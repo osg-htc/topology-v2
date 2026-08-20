@@ -67,6 +67,38 @@ func parseDowntimeTime(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// downtimeOutputLayout matches v1's Downtime.TIME_OUTPUT_FMT exactly
+// ("%b %d, %Y %H:%M %p %Z", webapp/topology.py) -- including its bug: %p
+// (12-hour AM/PM) is rendered alongside %H (24-hour), giving nonsensical but
+// real output like "Jun 10, 2025 13:38 PM UTC". Reproduced verbatim, not
+// "corrected", per the carbon-copy mandate. Go's "PM" token computes AM/PM
+// correctly from the actual hour regardless of the "15" token also present,
+// matching Python's %p behavior here exactly.
+const downtimeOutputLayout = "Jan 02, 2006 15:04 PM MST"
+
+// formatDowntimeTimeOrRaw renders a parsed time in v1's output format, or
+// falls back to the original stored string if parsing failed (rather than
+// silently dropping the value).
+func formatDowntimeTimeOrRaw(t time.Time, ok bool, raw string) string {
+	if !ok {
+		return raw
+	}
+	return t.UTC().Format(downtimeOutputLayout)
+}
+
+// formatCreatedTime matches v1's CreatedTime handling: the literal
+// "Not Available" when absent, else the same output format as
+// StartTime/EndTime.
+func formatCreatedTime(raw string) string {
+	if raw == "" {
+		return "Not Available"
+	}
+	if t, ok := parseDowntimeTime(raw); ok {
+		return t.UTC().Format(downtimeOutputLayout)
+	}
+	return raw
+}
+
 // BuildDowntimes assembles /rgdowntime output, bucketed relative to now.
 func BuildDowntimes(ctx context.Context, q *db.Queries, f Filters, now time.Time) (*Downtimes, error) {
 	rgs, err := q.ListResourceGroups(ctx)
@@ -102,33 +134,62 @@ func BuildDowntimes(ctx context.Context, q *db.Queries, f Filters, now time.Time
 			continue
 		}
 		res := resByName[d.ResourceName]
+		// A downtime service is only included if it matches one of the
+		// resource's actual services (by name), and its Description comes
+		// from that resource service, not the downtime record itself --
+		// matching v1's _expand_downtime exactly. A downtime with zero
+		// matching services is excluded entirely (v1 returns None for it).
+		resSvcs, _ := q.ListResourceServices(ctx, res.TopologyID)
+		resSvcDescByName := make(map[string]string, len(resSvcs))
+		for _, rs := range resSvcs {
+			resSvcDescByName[rs.ServiceName] = rs.Description
+		}
 		var svcs []DowntimeSvcXML
 		for _, name := range d.Services {
+			desc, matched := resSvcDescByName[name]
+			if !matched {
+				continue
+			}
 			id, ok := q.ServiceIDByName(ctx, name)
 			if !ok {
 				id = topology.GenID(name)
 			}
-			svcs = append(svcs, DowntimeSvcXML{ID: id, Name: name})
+			svcs = append(svcs, DowntimeSvcXML{ID: id, Name: name, Description: desc})
 		}
+		if len(svcs) == 0 {
+			continue
+		}
+		start, okS := parseDowntimeTime(d.StartTime)
+		end, okE := parseDowntimeTime(d.EndTime)
 		dx := DowntimeXML{
 			ID:            d.DtID,
 			ResourceID:    res.TopologyID,
 			ResourceGroup: DowntimeRGXML{GroupName: rg.Name, GroupID: rg.GroupID},
 			ResourceName:  d.ResourceName,
 			ResourceFQDN:  res.FQDN,
-			StartTime:     d.StartTime,
-			EndTime:       d.EndTime,
+			StartTime:     formatDowntimeTimeOrRaw(start, okS, d.StartTime),
+			EndTime:       formatDowntimeTimeOrRaw(end, okE, d.EndTime),
 			Class:         d.Class,
 			Severity:      d.Severity,
-			CreatedTime:   d.CreatedTime,
+			CreatedTime:   formatCreatedTime(d.CreatedTime),
 			UpdateTime:    "Not Available",
 			Services:      DowntimeSvcsXML{Services: svcs},
 			Description:   d.Description,
 		}
-		start, okS := parseDowntimeTime(d.StartTime)
-		end, okE := parseDowntimeTime(d.EndTime)
 		switch {
 		case okE && end.Before(now):
+			// Matches v1's default: past_days == 0 means no past downtime is
+			// shown at all (any past downtime has end_age > 0 by
+			// definition); past_days == -1 ("all") shows every past
+			// downtime unbounded; a positive N shows only those whose
+			// end_time is within the last N days. Current/future are never
+			// filtered by this.
+			if f.PastDays >= 0 {
+				endAgeSeconds := now.Sub(end).Seconds()
+				if endAgeSeconds > float64(f.PastDays)*86400 {
+					continue
+				}
+			}
 			past = append(past, dx)
 		case okS && start.After(now):
 			future = append(future, dx)
@@ -136,14 +197,12 @@ func BuildDowntimes(ctx context.Context, q *db.Queries, f Filters, now time.Time
 			current = append(current, dx)
 		}
 	}
-	if len(past) > 0 {
-		out.Past = &DowntimeList{Downtimes: past}
-	}
-	if len(current) > 0 {
-		out.Current = &DowntimeList{Downtimes: current}
-	}
-	if len(future) > 0 {
-		out.Future = &DowntimeList{Downtimes: future}
-	}
+	// v1 always renders all three buckets, even empty (e.g.
+	// <PastDowntimes></PastDowntimes>) -- the XSD marks them optional
+	// (minOccurs="0"), but matching v1's actual shape is the point, not just
+	// minimal schema validity.
+	out.Past = &DowntimeList{Downtimes: past}
+	out.Current = &DowntimeList{Downtimes: current}
+	out.Future = &DowntimeList{Downtimes: future}
 	return out, nil
 }

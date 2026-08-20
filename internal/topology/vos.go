@@ -2,6 +2,7 @@ package topology
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,6 +41,9 @@ func ReadVOs(dir string) ([]VODoc, error) {
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
+		}
+		if e.Name() == reportingGroupsFile {
+			continue // shared registry, not a VO -- see ReadReportingGroups
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
@@ -132,6 +136,72 @@ func ImportVOs(ctx context.Context, q *db.Queries, dir string) error {
 	return nil
 }
 
+// reportingGroupsFile is the shared registry a VO's ReportingGroups field
+// cross-references by name -- lives alongside the VO documents, but is not
+// itself a VO.
+const reportingGroupsFile = "REPORTING_GROUPS.yaml"
+
+// reportingGroupContact/reportingGroupFQAN/reportingGroupEntry mirror
+// REPORTING_GROUPS.yaml's shape exactly (webapp/vos_data.py's
+// reporting_groups_data): a flat map of name -> {Contacts, FQANs}.
+type reportingGroupContact struct {
+	ID   string `yaml:"ID" json:"ID"`
+	Name string `yaml:"Name" json:"Name"`
+}
+type reportingGroupFQAN struct {
+	GroupName string `yaml:"GroupName" json:"GroupName"`
+	Role      string `yaml:"Role" json:"Role"`
+}
+type reportingGroupEntry struct {
+	Contacts []reportingGroupContact `yaml:"Contacts" json:"Contacts"`
+	FQANs    []reportingGroupFQAN    `yaml:"FQANs" json:"FQANs"`
+}
+
+// ReadReportingGroups loads REPORTING_GROUPS.yaml from a virtual-organizations
+// directory, if present. Returns nil, nil if the file doesn't exist.
+func ReadReportingGroups(dir string) (map[string]reportingGroupEntry, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, reportingGroupsFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m map[string]reportingGroupEntry
+	if err := yaml.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", reportingGroupsFile, err)
+	}
+	return m, nil
+}
+
+// ImportReportingGroups writes the shared reporting-groups registry.
+func ImportReportingGroups(ctx context.Context, q *db.Queries, dir string) error {
+	groups, err := ReadReportingGroups(dir)
+	if err != nil {
+		return err
+	}
+	for name, g := range groups {
+		contactsJSON, err := json.Marshal(g.Contacts)
+		if err != nil {
+			return fmt.Errorf("marshal contacts for reporting group %q: %w", name, err)
+		}
+		fqansJSON, err := json.Marshal(g.FQANs)
+		if err != nil {
+			return fmt.Errorf("marshal FQANs for reporting group %q: %w", name, err)
+		}
+		if len(g.Contacts) == 0 {
+			contactsJSON = nil
+		}
+		if len(g.FQANs) == 0 {
+			fqansJSON = nil
+		}
+		if err := q.UpsertReportingGroup(ctx, name, contactsJSON, fqansJSON); err != nil {
+			return fmt.Errorf("import reporting group %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // ImportProjects parses projects into their relational columns.
 func ImportProjects(ctx context.Context, q *db.Queries, dir string) error {
 	projects, err := ReadProjects(dir)
@@ -149,6 +219,43 @@ func ImportProjects(ctx context.Context, q *db.Queries, dir string) error {
 			Extra: mustJSON(p.Extra),
 		}); err != nil {
 			return fmt.Errorf("import project %q: %w", p.Name, err)
+		}
+	}
+	return nil
+}
+
+// campusGridsFile is the shared registry a project's Sponsor.CampusGrid.Name
+// cross-references by name -- lives alongside the project documents (an
+// underscore-prefixed file, already excluded from ReadProjects), but is not
+// itself a project.
+const campusGridsFile = "_CAMPUS_GRIDS.yaml"
+
+// ReadCampusGrids loads _CAMPUS_GRIDS.yaml from a projects directory, if
+// present. Returns nil, nil if the file doesn't exist.
+func ReadCampusGrids(dir string) (map[string]int64, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, campusGridsFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m map[string]int64
+	if err := yaml.Unmarshal(raw, &m); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", campusGridsFile, err)
+	}
+	return m, nil
+}
+
+// ImportCampusGrids writes the shared campus-grid sponsor registry.
+func ImportCampusGrids(ctx context.Context, q *db.Queries, dir string) error {
+	grids, err := ReadCampusGrids(dir)
+	if err != nil {
+		return err
+	}
+	for name, id := range grids {
+		if err := q.UpsertCampusGrid(ctx, name, id); err != nil {
+			return fmt.Errorf("import campus grid %q: %w", name, err)
 		}
 	}
 	return nil

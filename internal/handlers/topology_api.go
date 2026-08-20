@@ -76,6 +76,22 @@ func parseFilters(r *http.Request) xmlapi.Filters {
 		v := q.Get("active_value") == "1"
 		f.Active = &v
 	}
+	// downtime_attrs_showpast: absent/empty leaves PastDays at its zero
+	// value (v1's own default -- no past downtime shown); "all" means
+	// unbounded; a valid integer is a day count. An invalid value is
+	// silently ignored (left at 0) rather than erroring, matching every
+	// other filter parsed in this function.
+	if v, ok := q["downtime_attrs_showpast"]; ok && len(v) > 0 {
+		switch raw := v[0]; raw {
+		case "":
+		case "all":
+			f.PastDays = -1
+		default:
+			if n, err := strconv.Atoi(raw); err == nil {
+				f.PastDays = n
+			}
+		}
+	}
 	return f
 }
 
@@ -188,7 +204,7 @@ func (h *Handler) MiscFacilityJSON(w http.ResponseWriter, r *http.Request) {
 
 // VOSummaryXML serves /vosummary/xml.
 func (h *Handler) VOSummaryXML(w http.ResponseWriter, r *http.Request) {
-	summary, err := xmlapi.BuildVOSummary(r.Context(), h.queries)
+	summary, err := xmlapi.BuildVOSummary(r.Context(), h.queries, h.includePII(r))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

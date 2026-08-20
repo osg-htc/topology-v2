@@ -71,6 +71,14 @@ func BuildProjects(ctx context.Context, q *db.Queries) (*Projects, error) {
 	for _, v := range vos {
 		voID[v.Name] = v.VOID
 	}
+	grids, err := q.ListCampusGrids(ctx)
+	if err != nil {
+		return nil, err
+	}
+	campusGridID := map[string]int64{}
+	for _, g := range grids {
+		campusGridID[g.Name] = g.CampusGridID
+	}
 
 	out := &Projects{
 		XsiNS:          "http://www.w3.org/2001/XMLSchema-instance",
@@ -82,7 +90,7 @@ func BuildProjects(ctx context.Context, q *db.Queries) (*Projects, error) {
 			PIName: p.PIName, Organization: p.Organization, Department: p.Department,
 			FieldOfScience: p.FieldOfScience, InstitutionID: p.InstitutionID,
 			FieldOfScienceID:    p.FieldOfScienceID,
-			Sponsor:             sponsorXML(p.SponsorType, p.SponsorName, voID),
+			Sponsor:             sponsorXML(p.SponsorType, p.SponsorName, voID, campusGridID),
 			ResourceAllocations: resourceAllocationsXML(p.Extra),
 		}
 		out.Projects = append(out.Projects, px)
@@ -90,7 +98,7 @@ func BuildProjects(ctx context.Context, q *db.Queries) (*Projects, error) {
 	return out, nil
 }
 
-func sponsorXML(sType, sName string, voID map[string]int64) SponsorXML {
+func sponsorXML(sType, sName string, voID, campusGridID map[string]int64) SponsorXML {
 	switch sType {
 	case "VirtualOrganization":
 		id := voID[sName]
@@ -99,7 +107,11 @@ func sponsorXML(sType, sName string, voID map[string]int64) SponsorXML {
 		}
 		return SponsorXML{VirtualOrganization: &SponsorRefXML{ID: id, Name: sName}}
 	case "CampusGrid":
-		return SponsorXML{CampusGrid: &SponsorRefXML{ID: topology.GenID(sName), Name: sName}}
+		id, ok := campusGridID[sName]
+		if !ok {
+			id = topology.GenID(sName)
+		}
+		return SponsorXML{CampusGrid: &SponsorRefXML{ID: id, Name: sName}}
 	default:
 		return SponsorXML{}
 	}
