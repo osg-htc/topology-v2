@@ -98,16 +98,22 @@ function NewResourceForm() {
   const hasContact = contacts.some((c) => c.name || c.id);
   const tagOptions = Array.from(new Set([...COMMON_TAGS, ...(tagNames ?? [])]));
 
+  // Every field this form actually renders is always included below, even
+  // when empty -- the backend now merges a submission onto the resource's
+  // current state, keyed by field presence, so omitting a key means "leave
+  // whatever this already had," not "empty." A field the form has no input
+  // for at all (e.g. DN, VOOwnership) is correctly never mentioned here,
+  // which is exactly what keeps it safe.
   const buildResource = (): Record<string, unknown> => {
     const resource: Record<string, unknown> = { FQDN: hostname, Active: active };
-    if (description) resource.Description = description;
-    if (aliases.length) resource.FQDNAliases = aliases;
-    if (tags.length) resource.Tags = tags;
-    if (allowedVOs.length) resource.AllowedVOs = allowedVOs;
+    resource.Description = description;
+    resource.FQDNAliases = aliases;
+    resource.Tags = tags;
+    resource.AllowedVOs = allowedVOs;
 
     const svc: Record<string, unknown> = {};
     for (const s of services) if (s.name) svc[s.name] = s.description ? { Description: s.description } : {};
-    if (Object.keys(svc).length) resource.Services = svc;
+    resource.Services = svc;
 
     // Rank is derived from order within each contact type (1st = Primary, …).
     const cl: Record<string, Record<string, unknown>> = {};
@@ -120,7 +126,7 @@ function NewResourceForm() {
       cl[c.type] = cl[c.type] || {};
       cl[c.type][rank] = { Name: c.name, ID: c.id };
     }
-    if (Object.keys(cl).length) resource.ContactLists = cl;
+    resource.ContactLists = cl;
     return resource;
   };
 

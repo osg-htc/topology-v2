@@ -60,8 +60,21 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	u := h.currentUser(r)
 	ctx := r.Context()
 
-	// Validate the payload against the current JSON Schema for this kind
-	// (delete carries no payload, so skip it there).
+	// Snapshot the live entity as base_version -- the "before" for a
+	// before/after view, captured once at the actual branch point -- and,
+	// for updates, the base a partial submission gets merged onto, so a
+	// field no editing tool has UI for is preserved rather than silently
+	// wiped. See mergeProposedState.
+	var base json.RawMessage
+	if req.Operation != models.OpCreate && req.TargetName != "" {
+		base = h.snapshotEntity(ctx, req.EntityKind, req.TargetName)
+	}
+	if req.Operation == models.OpUpdate && base != nil {
+		req.ProposedState = mergeProposedState(req.EntityKind, base, req.ProposedState)
+	}
+
+	// Validate the (now-complete, for updates) payload against the current
+	// JSON Schema for this kind (delete carries no payload, so skip it there).
 	schemaVer := 0
 	if req.Operation != models.OpDelete && proposalschema.Known(req.EntityKind) {
 		schemaVer = proposalschema.CurrentVersion(req.EntityKind)
@@ -74,11 +87,6 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	status := models.ProposalDraft
 	if req.Submit {
 		status = models.ProposalPending
-	}
-	// Snapshot the live entity as base_version for update/delete (conflict detection).
-	var base json.RawMessage
-	if req.Operation != models.OpCreate && req.TargetName != "" && req.EntityKind == models.KindResource {
-		base = h.snapshotResource(ctx, req.TargetName)
 	}
 
 	id, err := h.queries.CreateProposal(ctx, db.CreateProposalParams{
@@ -128,6 +136,14 @@ func (h *Handler) ReviseProposal(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid body")
 		return
+	}
+	// Merge onto the proposal's own current proposed_state (already
+	// complete, from creation or an earlier revision) -- not a fresh live
+	// snapshot, matching snapshotEntity's "never on revise" rule -- so a
+	// field this revision's editing tool has no UI for stays whatever the
+	// proposal already had, rather than being wiped.
+	if p.Operation == models.OpUpdate {
+		req.ProposedState = mergeProposedState(p.EntityKind, p.ProposedState, req.ProposedState)
 	}
 	// Edits always target the current schema version.
 	if p.Operation != models.OpDelete && proposalschema.Known(p.EntityKind) {
@@ -723,19 +739,6 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 	// tx-bound Queries from ApproveProposal's WithTx, so this is atomic with
 	// the resource's creation.
 	return q.UpdateProposalTargetName(ctx, p.ID, strconv.FormatInt(topID, 10))
-}
-
-// snapshotResource captures the current resource state as base_version.
-// target is the resource's topology_id: for a resource proposal, target_name
-// now holds the id (not the name) -- see applyResourceProposal -- so no
-// lookup is needed, just parse it back out.
-func (h *Handler) snapshotResource(ctx context.Context, target string) json.RawMessage {
-	id, err := strconv.ParseInt(target, 10, 64)
-	if err != nil {
-		return nil
-	}
-	b, _ := json.Marshal(map[string]any{"resource_id": id})
-	return b
 }
 
 // audit is a convenience wrapper that never blocks the request on failure.

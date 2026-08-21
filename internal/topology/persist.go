@@ -404,7 +404,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 		if len(svcs) > 0 {
 			res.Services = map[string]*Service{}
 			for _, s := range svcs {
-				res.Services[s.ServiceName] = serviceFromBlob(s.Description, s.Details)
+				res.Services[s.ServiceName] = ServiceFromBlob(s.Description, s.Details)
 			}
 		}
 		// Contacts.
@@ -512,8 +512,8 @@ type svcBlob struct {
 	Extra   map[string]interface{} `json:"extra,omitempty"`
 }
 
-// serviceFromBlob reconstructs a Service from its stored description and blob.
-func serviceFromBlob(desc string, blob []byte) *Service {
+// ServiceFromBlob reconstructs a Service from its stored description and blob.
+func ServiceFromBlob(desc string, blob []byte) *Service {
 	svc := &Service{Description: desc}
 	if len(blob) == 0 {
 		return svc

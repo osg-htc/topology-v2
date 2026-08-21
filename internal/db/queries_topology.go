@@ -315,6 +315,41 @@ func (q *Queries) ListFacilities(ctx context.Context) ([]FacilityRow, error) {
 	return out, rows.Err()
 }
 
+// GetFacilityRow fetches a single facility by name, for use as a proposal
+// "before" snapshot.
+func (q *Queries) GetFacilityRow(ctx context.Context, name string) (*FacilityRow, error) {
+	var r FacilityRow
+	err := q.pool.QueryRow(ctx,
+		`SELECT id, topology_id, name, COALESCE(institution_id,''), extra, id_explicit
+		 FROM facilities WHERE name = $1 AND deleted_at IS NULL`, name,
+	).Scan(&r.ID, &r.TopologyID, &r.Name, &r.InstitutionID, &r.Extra, &r.IDExplicit)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// GetSiteRow fetches a single site by name, for use as a proposal "before"
+// snapshot. Unlike GetSiteDetail, this includes ID/TopologyID/Extra/IDExplicit.
+func (q *Queries) GetSiteRow(ctx context.Context, name string) (*SiteRow, error) {
+	var r SiteRow
+	err := q.pool.QueryRow(ctx,
+		`SELECT s.id, s.topology_id, f.name, s.name, COALESCE(s.long_name,''),
+		        COALESCE(s.description,''), COALESCE(s.address_line1,''),
+		        COALESCE(s.address_line2,''), COALESCE(s.city,''), COALESCE(s.state,''),
+		        COALESCE(s.country,''), COALESCE(s.zipcode,''), s.latitude, s.longitude,
+		        s.extra, s.id_explicit
+		 FROM sites s JOIN facilities f ON f.id = s.facility_id
+		 WHERE s.name = $1 AND s.deleted_at IS NULL`, name,
+	).Scan(&r.ID, &r.TopologyID, &r.FacilityName, &r.Name, &r.LongName,
+		&r.Description, &r.AddressLine1, &r.AddressLine2, &r.City, &r.State,
+		&r.Country, &r.Zipcode, &r.Latitude, &r.Longitude, &r.Extra, &r.IDExplicit)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 func (q *Queries) ListSites(ctx context.Context) ([]SiteRow, error) {
 	rows, err := q.pool.Query(ctx,
 		`SELECT s.id, s.topology_id, f.name, s.name, COALESCE(s.long_name,''),
@@ -339,6 +374,24 @@ func (q *Queries) ListSites(ctx context.Context) ([]SiteRow, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// GetResourceGroupRow fetches a single resource group by name, for use as a
+// proposal "before" snapshot.
+func (q *Queries) GetResourceGroupRow(ctx context.Context, name string) (*ResourceGroupRow, error) {
+	var r ResourceGroupRow
+	err := q.pool.QueryRow(ctx,
+		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production,
+		        COALESCE(rg.support_center,''), COALESCE(rg.group_description,''),
+		        rg.extra, rg.id_explicit
+		 FROM resource_groups rg JOIN sites s ON s.id = rg.site_id
+		 WHERE rg.name = $1 AND rg.deleted_at IS NULL`, name,
+	).Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production,
+		&r.SupportCenter, &r.GroupDescription, &r.Extra, &r.IDExplicit)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 func (q *Queries) ListResourceGroups(ctx context.Context) ([]ResourceGroupRow, error) {
@@ -386,6 +439,25 @@ func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// GetResourceRow fetches a single resource by its topology_id, for use as a
+// proposal "before" snapshot.
+func (q *Queries) GetResourceRow(ctx context.Context, topologyID int64) (*ResourceRow, error) {
+	var r ResourceRow
+	err := q.pool.QueryRow(ctx,
+		`SELECT r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
+		        r.fqdn, COALESCE(r.dn,''), r.fqdn_aliases, r.tags, r.allowed_vos,
+		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit
+		 FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
+		 WHERE r.topology_id = $1 AND r.deleted_at IS NULL`, topologyID,
+	).Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
+		&r.FQDN, &r.DN, &r.FQDNAliases, &r.Tags, &r.AllowedVOs,
+		&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 func (q *Queries) ListResourceServices(ctx context.Context, resourceID int64) ([]ResourceServiceRow, error) {

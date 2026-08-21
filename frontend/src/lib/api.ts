@@ -73,6 +73,7 @@ export interface Proposal {
   status: string;
   proposed_state: unknown;
   schema_version: number;
+  base_version?: unknown;
   created_by: string;
   assigned_reviewer?: string;
   review_note?: string;

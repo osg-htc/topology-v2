@@ -60,12 +60,17 @@ function NewSiteForm() {
     setErr("");
     setBusy(true);
     try {
+      // Every field below is always included, even empty -- the backend
+      // merges a submission onto the site's current state by field
+      // presence, so omitting a key means "leave as-is," not "clear it."
+      // address_line2 has no input on this form and is deliberately never
+      // mentioned here, so it's preserved rather than wiped.
       const proposed: Record<string, unknown> = { name: f.name, facility: f.facility };
       for (const k of ["long_name", "description", "address_line1", "city", "state", "country", "zipcode"] as const) {
-        if (f[k]) proposed[k] = f[k];
+        proposed[k] = f[k];
       }
-      if (f.latitude) proposed.latitude = Number(f.latitude);
-      if (f.longitude) proposed.longitude = Number(f.longitude);
+      proposed.latitude = f.latitude ? Number(f.latitude) : null;
+      proposed.longitude = f.longitude ? Number(f.longitude) : null;
       proposed.contacts = toEntityContacts(contacts);
       const res = await api.proposals.create({
         entity_kind: "site",

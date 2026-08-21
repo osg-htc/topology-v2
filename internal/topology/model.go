@@ -74,7 +74,11 @@ type ResourceGroup struct {
 
 // Resource is the primary entity, nested under a ResourceGroup's Resources map.
 type Resource struct {
-	ID           *int64                        `yaml:"ID,omitempty"`
+	// json omitempty matters here: this struct is also embedded in a resource
+	// proposal's JSON payload (resourceProposal.Resource), which never
+	// carries an ID -- without it, a nil ID marshals as "ID": null instead
+	// of being omitted, breaking the before/after snapshot's comparability.
+	ID           *int64                        `yaml:"ID,omitempty" json:"ID,omitempty"`
 	Active       *bool                         `yaml:"Active,omitempty"`
 	Description  string                        `yaml:"Description,omitempty"`
 	FQDN         string                        `yaml:"FQDN"`

@@ -52,13 +52,14 @@ function NewProjectForm() {
     setErr("");
     setBusy(true);
     try {
+      // Every field below is always included, even empty -- the backend
+      // merges a submission onto the project's current state by field
+      // presence, so omitting a key means "leave as-is," not "clear it."
       const proposed: Record<string, unknown> = { name: f.name };
       for (const k of ["id", "description", "department", "field_of_science", "field_of_science_id", "organization", "pi_name", "institution_id"] as const) {
-        if (f[k]) proposed[k] = f[k];
+        proposed[k] = f[k];
       }
-      if (f.sponsor_name) {
-        proposed.sponsor = { [f.sponsor_type]: { Name: f.sponsor_name } };
-      }
+      proposed.sponsor = f.sponsor_name ? { [f.sponsor_type]: { Name: f.sponsor_name } } : null;
       const res = await api.proposals.create({
         entity_kind: "project",
         operation: editName ? "update" : "create",

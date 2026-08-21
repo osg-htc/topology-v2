@@ -95,17 +95,32 @@ function ProposalView() {
                 </Link>
               )}
             </div>
-            {p.operation === "delete" ? (
-              <p className="text-sm text-gray-600">
-                Proposes deleting{" "}
-                <span className="font-medium">
-                  {(p.proposed_state as { name?: string } | null)?.name ?? p.target_name}
-                </span>
-                .
-              </p>
-            ) : (
-              <StructuredView value={p.proposed_state} />
-            )}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="min-w-0">
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Before</h4>
+                {p.operation === "create" ? (
+                  <p className="text-sm text-gray-400">New — nothing existed yet.</p>
+                ) : p.base_version ? (
+                  <StructuredView value={p.base_version} other={p.proposed_state} />
+                ) : (
+                  <p className="text-sm text-gray-400">Not available.</p>
+                )}
+              </div>
+              <div className="min-w-0">
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Proposed</h4>
+                {p.operation === "delete" ? (
+                  <p className="text-sm text-gray-600">
+                    Proposes deleting{" "}
+                    <span className="font-medium">
+                      {(p.proposed_state as { name?: string } | null)?.name ?? p.target_name}
+                    </span>
+                    .
+                  </p>
+                ) : (
+                  <StructuredView value={p.proposed_state} other={p.base_version ?? undefined} />
+                )}
+              </div>
+            </div>
           </Card>
 
           {p.revisions && p.revisions.length > 0 && (
