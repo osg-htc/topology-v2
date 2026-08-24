@@ -54,28 +54,30 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 	}
 	// Deliberately no ID: a proposal's own Resource payload never carries
 	// one, so leaving it out keeps the two columns comparable field-for-field.
+	// Same reason as the emptySlice fields above: Services/ContactLists are
+	// schema-typed "object", and a nil map marshals to JSON null just like a
+	// nil slice does -- initialize both empty (not nil) so a resource with
+	// zero services/contacts still snapshots to a mergeable, schema-valid
+	// base rather than a null the schema rejects the moment a partial
+	// update gets merged onto it.
+	res.Services = map[string]*topology.Service{}
 	svcs, err := h.queries.ListResourceServices(ctx, topID)
 	if err != nil {
 		return nil
 	}
-	if len(svcs) > 0 {
-		res.Services = map[string]*topology.Service{}
-		for _, s := range svcs {
-			res.Services[s.ServiceName] = topology.ServiceFromBlob(s.Description, s.Details)
-		}
+	for _, s := range svcs {
+		res.Services[s.ServiceName] = topology.ServiceFromBlob(s.Description, s.Details)
 	}
+	res.ContactLists = map[string]map[string]topology.Contact{}
 	contacts, err := h.queries.ListResourceContacts(ctx, topID)
 	if err != nil {
 		return nil
 	}
-	if len(contacts) > 0 {
-		res.ContactLists = map[string]map[string]topology.Contact{}
-		for _, c := range contacts {
-			if res.ContactLists[c.ContactType] == nil {
-				res.ContactLists[c.ContactType] = map[string]topology.Contact{}
-			}
-			res.ContactLists[c.ContactType][c.Rank] = topology.Contact{Name: c.ContactName, ID: c.ContactID}
+	for _, c := range contacts {
+		if res.ContactLists[c.ContactType] == nil {
+			res.ContactLists[c.ContactType] = map[string]topology.Contact{}
 		}
+		res.ContactLists[c.ContactType][c.Rank] = topology.Contact{Name: c.ContactName, ID: c.ContactID}
 	}
 	b, err := json.Marshal(resourceProposal{ResourceGroup: row.RGName, Name: row.Name, Resource: res})
 	if err != nil {
