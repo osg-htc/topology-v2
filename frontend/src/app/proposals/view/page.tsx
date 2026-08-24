@@ -71,6 +71,16 @@ function ProposalView() {
   // Route "edit in form" to the matching structured create/edit form.
   const editHref = editFormHref(p.entity_kind, p.proposed_state);
 
+  // Drives which Actions buttons render below -- and, when none of them do,
+  // whether that's because the proposal is already decided (applied/
+  // rejected/withdrawn) or because this viewer just has no role here. Either
+  // way the Actions card must say something, not render empty.
+  const canSubmit = isCreator && p.status === "draft";
+  const canWithdraw = isCreator && (p.status === "draft" || p.status === "pending");
+  const canReview = isReviewer && p.status === "pending";
+  const hasActions = canSubmit || canWithdraw || canReview;
+  const decided = p.status !== "draft" && p.status !== "pending";
+
   const summary = proposalSummary(p);
 
   return (
@@ -153,7 +163,7 @@ function ProposalView() {
           <Card>
             <h3 className="mb-3 text-sm font-semibold text-gray-700">Actions</h3>
             <div className="space-y-2">
-              {isCreator && p.status === "draft" && (
+              {canSubmit && (
                 <button
                   className={`${btn} w-full justify-center`}
                   onClick={() => act.mutate(() => api.proposals.submit(id))}
@@ -161,7 +171,7 @@ function ProposalView() {
                   Submit for review
                 </button>
               )}
-              {isCreator && (p.status === "draft" || p.status === "pending") && (
+              {canWithdraw && (
                 <button
                   className={`${btnSecondary} w-full justify-center`}
                   onClick={() => act.mutate(() => api.proposals.withdraw(id))}
@@ -169,7 +179,7 @@ function ProposalView() {
                   Withdraw
                 </button>
               )}
-              {isReviewer && p.status === "pending" && (
+              {canReview && (
                 <>
                   <button
                     className={`${btn} w-full justify-center`}
@@ -191,8 +201,12 @@ function ProposalView() {
                   </button>
                 </>
               )}
-              {!isCreator && !isReviewer && (
-                <p className="text-xs text-gray-400">No actions available.</p>
+              {!hasActions && (
+                <p className="text-xs text-gray-400">
+                  {decided
+                    ? `This proposal has already been ${p.status} — no further action needed.`
+                    : "No actions available."}
+                </p>
               )}
             </div>
             {msg && <p className="mt-3 text-xs text-gray-500">{msg}</p>}

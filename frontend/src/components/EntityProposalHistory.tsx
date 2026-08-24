@@ -13,15 +13,20 @@ const OP_COLOR: Record<string, string> = {
 };
 
 function formatShort(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  const d = new Date(iso);
+  // Built separately (not one combined toLocaleString call) so the result
+  // has no locale-inserted comma between the date and time parts.
+  const date = d.toLocaleDateString(undefined, { dateStyle: "short" });
+  const time = d.toLocaleTimeString(undefined, { timeStyle: "short" });
+  return `${date} ${time}`;
 }
 
-// EntityProposalHistory shows the proposals that make up a given entity's
-// actual edit history (pending or applied only -- see
-// ListProposalsByEntity). Deliberately not the general ProposalRow: this
-// lives in a narrow sidebar, already knows what entity/page it's on, so it
-// drops the entity title and change-summary line and shows one name per
-// actor instead of "Display name (username)".
+// EntityProposalHistory shows a given entity's actual edit history --
+// applied proposals only, a still-pending one isn't history yet. Deliberately
+// not the general ProposalRow: this lives in a narrow sidebar, already knows
+// what entity/page it's on, so it drops the entity title and change-summary
+// line, and skips the approver's name entirely -- the proposer's name in the
+// row's own title is enough context for this quick summary.
 export function EntityProposalHistory({
   entityKind,
   targetName,
@@ -34,17 +39,18 @@ export function EntityProposalHistory({
     queryFn: () => api.proposals.byEntity(entityKind, targetName),
     enabled: !!targetName,
   });
+  const history = data?.filter((p) => p.status !== "pending") ?? [];
 
   return (
     <Card>
       <h3 className="mb-2 text-sm font-semibold text-gray-700">Edit history</h3>
       {isLoading ? (
         <p className="text-sm text-gray-400">Loading…</p>
-      ) : !data || data.length === 0 ? (
+      ) : history.length === 0 ? (
         <p className="text-sm text-gray-500">No proposals have targeted this yet.</p>
       ) : (
         <div className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
-          {data.map((p) => (
+          {history.map((p) => (
             <HistoryRow key={p.id} p={p} />
           ))}
         </div>
@@ -71,11 +77,7 @@ function HistoryRow({ p }: { p: Proposal }) {
         </span>
       </div>
       <div className="mt-1 text-gray-500">Proposed {formatShort(p.created_at)}</div>
-      {p.status !== "pending" && (
-        <div className="text-gray-500">
-          {p.status} {formatShort(p.updated_at)} by <UserLabel id={p.assigned_reviewer ?? ""} compact />
-        </div>
-      )}
+      <div className="text-gray-500">Applied {formatShort(p.updated_at)}</div>
     </Link>
   );
 }
