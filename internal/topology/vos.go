@@ -100,7 +100,7 @@ func ReadProjects(dir string) ([]Project, error) {
 			return nil, err
 		}
 		var p Project
-		if err := decodeYAMLLenient(raw, &p); err != nil {
+		if err := DecodeYAMLLenient(raw, &p); err != nil {
 			return nil, fmt.Errorf("parsing project %s: %w", e.Name(), err)
 		}
 		p.Name = strings.TrimSuffix(e.Name(), ".yaml")

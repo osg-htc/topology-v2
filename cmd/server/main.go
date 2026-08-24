@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/bbockelm/topology-v2/internal/config"
 	"github.com/bbockelm/topology-v2/internal/db"
+	"github.com/bbockelm/topology-v2/internal/githistory"
 	"github.com/bbockelm/topology-v2/internal/router"
 	"github.com/bbockelm/topology-v2/internal/storage"
 	"github.com/bbockelm/topology-v2/internal/topology"
@@ -40,6 +42,11 @@ func main() {
 		case "backfill-contacts":
 			if err := runBackfillContacts(); err != nil {
 				log.Fatal().Err(err).Msg("backfill-contacts failed")
+			}
+			return
+		case "import-history":
+			if err := runImportHistory(os.Args[2:]); err != nil {
+				log.Fatal().Err(err).Msg("import-history failed")
 			}
 			return
 		case "version":
@@ -105,6 +112,57 @@ func runBackfillContacts() error {
 		return err
 	}
 	log.Info().Int("linked", linked).Msg("contact users backfilled")
+	return nil
+}
+
+// runImportHistory handles `topology-server import-history <repo-root> <ref>
+// [since] [limit]`, replaying a v1 topology repo's git history into
+// change_proposals -- see internal/githistory's package doc. Must run after
+// import-tree has already loaded the current snapshot. since (a date like
+// "2019-01-01") and limit (stop after writing this many new proposals, for
+// a cheap incremental run against a slice of history) are both optional and
+// order-independent -- whichever of the two trailing args looks like a date
+// is since, whichever looks like a plain integer is limit.
+func runImportHistory(args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: import-history <repo-root> <ref> [since] [limit]")
+	}
+	since := ""
+	limit := 0
+	for _, a := range args[2:] {
+		if n, err := strconv.Atoi(a); err == nil {
+			limit = n
+			continue
+		}
+		since = a
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if cfg.DatabaseURL == "" {
+		return errors.New("DATABASE_URL is required")
+	}
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	result, err := githistory.Run(ctx, db.New(pool), githistory.Options{
+		RepoPath: args[0], Ref: args[1], Since: since, Limit: limit,
+	})
+	if err != nil {
+		return err
+	}
+	log.Info().
+		Int("commits_considered", result.CommitsConsidered).
+		Int("commits_skipped", result.CommitsSkipped).
+		Int("proposals_written", result.ProposalsWritten).
+		Msg("history import complete")
 	return nil
 }
 

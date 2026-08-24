@@ -134,15 +134,15 @@ func readYAMLFile(path string, v interface{}) error {
 	if err != nil {
 		return &fileError{path: path, err: err}
 	}
-	if err := decodeYAMLLenient(data, v); err != nil {
+	if err := DecodeYAMLLenient(data, v); err != nil {
 		return fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return nil
 }
 
-// decodeYAMLLenient unmarshals YAML into v, tolerating duplicate mapping keys
+// DecodeYAMLLenient unmarshals YAML into v, tolerating duplicate mapping keys
 // (last-wins, like PyYAML) which yaml.v3 otherwise rejects.
-func decodeYAMLLenient(data []byte, v interface{}) error {
+func DecodeYAMLLenient(data []byte, v interface{}) error {
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return err
