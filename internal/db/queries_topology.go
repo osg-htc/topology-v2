@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
 // This file holds the persistence layer for the topology domain used by the
@@ -17,6 +18,9 @@ type FacilityRow struct {
 	InstitutionID string
 	Extra         []byte
 	IDExplicit    bool
+	// UpdatedAt is only populated by GetFacilityRow, for the proposal
+	// stale-base guard -- List* callers leave it zero, unused.
+	UpdatedAt time.Time
 }
 
 type SiteRow struct {
@@ -37,6 +41,9 @@ type SiteRow struct {
 	Longitude    *float64
 	Extra        []byte
 	IDExplicit   bool
+	// UpdatedAt is only populated by GetSiteRow, for the proposal stale-base
+	// guard -- List* callers leave it zero, unused.
+	UpdatedAt time.Time
 }
 
 type ResourceGroupRow struct {
@@ -50,6 +57,9 @@ type ResourceGroupRow struct {
 	GroupDescription string
 	Extra            []byte
 	IDExplicit       bool
+	// UpdatedAt is only populated by GetResourceGroupRow, for the proposal
+	// stale-base guard -- List* callers leave it zero, unused.
+	UpdatedAt time.Time
 }
 
 type ResourceRow struct {
@@ -68,6 +78,9 @@ type ResourceRow struct {
 	WLCGInformation []byte
 	Extra           []byte
 	IDExplicit      bool
+	// UpdatedAt is only populated by GetResourceRow, for the proposal
+	// stale-base guard -- List* callers leave it zero, unused.
+	UpdatedAt time.Time
 }
 
 type ResourceServiceRow struct {
@@ -320,9 +333,9 @@ func (q *Queries) ListFacilities(ctx context.Context) ([]FacilityRow, error) {
 func (q *Queries) GetFacilityRow(ctx context.Context, name string) (*FacilityRow, error) {
 	var r FacilityRow
 	err := q.pool.QueryRow(ctx,
-		`SELECT id, topology_id, name, COALESCE(institution_id,''), extra, id_explicit
+		`SELECT id, topology_id, name, COALESCE(institution_id,''), extra, id_explicit, updated_at
 		 FROM facilities WHERE name = $1 AND deleted_at IS NULL`, name,
-	).Scan(&r.ID, &r.TopologyID, &r.Name, &r.InstitutionID, &r.Extra, &r.IDExplicit)
+	).Scan(&r.ID, &r.TopologyID, &r.Name, &r.InstitutionID, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -338,12 +351,12 @@ func (q *Queries) GetSiteRow(ctx context.Context, name string) (*SiteRow, error)
 		        COALESCE(s.description,''), COALESCE(s.address_line1,''),
 		        COALESCE(s.address_line2,''), COALESCE(s.city,''), COALESCE(s.state,''),
 		        COALESCE(s.country,''), COALESCE(s.zipcode,''), s.latitude, s.longitude,
-		        s.extra, s.id_explicit
+		        s.extra, s.id_explicit, s.updated_at
 		 FROM sites s JOIN facilities f ON f.id = s.facility_id
 		 WHERE s.name = $1 AND s.deleted_at IS NULL`, name,
 	).Scan(&r.ID, &r.TopologyID, &r.FacilityName, &r.Name, &r.LongName,
 		&r.Description, &r.AddressLine1, &r.AddressLine2, &r.City, &r.State,
-		&r.Country, &r.Zipcode, &r.Latitude, &r.Longitude, &r.Extra, &r.IDExplicit)
+		&r.Country, &r.Zipcode, &r.Latitude, &r.Longitude, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -383,11 +396,11 @@ func (q *Queries) GetResourceGroupRow(ctx context.Context, name string) (*Resour
 	err := q.pool.QueryRow(ctx,
 		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production,
 		        COALESCE(rg.support_center,''), COALESCE(rg.group_description,''),
-		        rg.extra, rg.id_explicit
+		        rg.extra, rg.id_explicit, rg.updated_at
 		 FROM resource_groups rg JOIN sites s ON s.id = rg.site_id
 		 WHERE rg.name = $1 AND rg.deleted_at IS NULL`, name,
 	).Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production,
-		&r.SupportCenter, &r.GroupDescription, &r.Extra, &r.IDExplicit)
+		&r.SupportCenter, &r.GroupDescription, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -448,12 +461,12 @@ func (q *Queries) GetResourceRow(ctx context.Context, topologyID int64) (*Resour
 	err := q.pool.QueryRow(ctx,
 		`SELECT r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
 		        r.fqdn, COALESCE(r.dn,''), r.fqdn_aliases, r.tags, r.allowed_vos,
-		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit
+		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit, r.updated_at
 		 FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
 		 WHERE r.topology_id = $1 AND r.deleted_at IS NULL`, topologyID,
 	).Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
 		&r.FQDN, &r.DN, &r.FQDNAliases, &r.Tags, &r.AllowedVOs,
-		&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit)
+		&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

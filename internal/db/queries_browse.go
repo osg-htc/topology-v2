@@ -230,11 +230,11 @@ func (q *Queries) GetProjectByName(ctx context.Context, name string) (*ProjectRo
 		`SELECT name, COALESCE(project_id,''), COALESCE(description,''), COALESCE(department,''),
 		        COALESCE(field_of_science,''), COALESCE(field_of_science_id,''),
 		        COALESCE(organization,''), COALESCE(pi_name,''), COALESCE(institution_id,''),
-		        sponsor, COALESCE(sponsor_type,''), COALESCE(sponsor_name,''), extra
+		        sponsor, COALESCE(sponsor_type,''), COALESCE(sponsor_name,''), extra, updated_at
 		 FROM projects WHERE name=$1 AND deleted_at IS NULL`, name).
 		Scan(&r.Name, &r.ProjectID, &r.Description, &r.Department, &r.FieldOfScience,
 			&r.FieldOfScienceID, &r.Organization, &r.PIName, &r.InstitutionID,
-			&r.Sponsor, &r.SponsorType, &r.SponsorName, &r.Extra)
+			&r.Sponsor, &r.SponsorType, &r.SponsorName, &r.Extra, &r.UpdatedAt)
 	if err != nil {
 		return nil, ErrNotFound
 	}

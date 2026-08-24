@@ -74,6 +74,8 @@ export interface Proposal {
   proposed_state: unknown;
   schema_version: number;
   base_version?: unknown;
+  // TEMPORARY dev-only stale-base guard -- see internal/handlers/proposal_stale.go.
+  base_stale?: boolean;
   created_by: string;
   assigned_reviewer?: string;
   review_note?: string;

@@ -37,13 +37,18 @@ const (
 // entity. proposed_state is the mutable head; the full edit history lives in
 // change_proposal_revisions.
 type Proposal struct {
-	ID               string             `json:"id"`
-	EntityKind       string             `json:"entity_kind"`
-	TargetName       string             `json:"target_name,omitempty"`
-	Operation        string             `json:"operation"`
-	ProposedState    json.RawMessage    `json:"proposed_state"`
-	SchemaVersion    int                `json:"schema_version"`
-	BaseVersion      json.RawMessage    `json:"base_version,omitempty"`
+	ID            string          `json:"id"`
+	EntityKind    string          `json:"entity_kind"`
+	TargetName    string          `json:"target_name,omitempty"`
+	Operation     string          `json:"operation"`
+	ProposedState json.RawMessage `json:"proposed_state"`
+	SchemaVersion int             `json:"schema_version"`
+	BaseVersion   json.RawMessage `json:"base_version,omitempty"`
+	// BaseUpdatedAt and BaseStale are a TEMPORARY dev-only optimistic-
+	// concurrency guard -- see internal/handlers/proposal_stale.go. Remove
+	// both fields (and their column/call sites) together when that file goes.
+	BaseUpdatedAt    *time.Time         `json:"-"`
+	BaseStale        bool               `json:"base_stale,omitempty"`
 	Status           string             `json:"status"`
 	CreatedBy        string             `json:"created_by"`
 	AssignedReviewer string             `json:"assigned_reviewer,omitempty"`

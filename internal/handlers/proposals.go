@@ -66,8 +66,13 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	// field no editing tool has UI for is preserved rather than silently
 	// wiped. See mergeProposedState.
 	var base json.RawMessage
+	// baseUpdatedAt is part of a TEMPORARY stale-base guard -- see
+	// proposal_stale.go -- captured alongside base for the same reason: it's
+	// the state of the world when this proposal branched off.
+	var baseUpdatedAt *time.Time
 	if req.Operation != models.OpCreate && req.TargetName != "" {
 		base = h.snapshotEntity(ctx, req.EntityKind, req.TargetName)
+		baseUpdatedAt, _ = entityUpdatedAt(ctx, h.queries, req.EntityKind, req.TargetName)
 	}
 	if req.Operation == models.OpUpdate && base != nil {
 		req.ProposedState = mergeProposedState(req.EntityKind, base, req.ProposedState)
@@ -92,7 +97,8 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	id, err := h.queries.CreateProposal(ctx, db.CreateProposalParams{
 		EntityKind: req.EntityKind, TargetName: req.TargetName, Operation: req.Operation,
 		ProposedState: req.ProposedState, SchemaVersion: schemaVer, BaseVersion: base,
-		Status: status, CreatedBy: u.ID, Note: req.Note,
+		BaseUpdatedAt: baseUpdatedAt,
+		Status:        status, CreatedBy: u.ID, Note: req.Note,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "creating proposal")
@@ -268,6 +274,15 @@ func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
 	if revs, err := h.queries.ListRevisions(ctx, id); err == nil {
 		p.Revisions = revs
 	}
+	// TEMPORARY stale-base guard (see proposal_stale.go): only worth checking
+	// while the proposal is still undecided -- an applied/rejected/withdrawn
+	// proposal's base staleness no longer matters.
+	if p.Operation != models.OpCreate && p.BaseUpdatedAt != nil &&
+		(p.Status == models.ProposalDraft || p.Status == models.ProposalPending) {
+		if cur, err := entityUpdatedAt(ctx, h.queries, p.EntityKind, p.TargetName); err == nil {
+			p.BaseStale = cur == nil || !cur.Equal(*p.BaseUpdatedAt)
+		}
+	}
 	respondJSON(w, http.StatusOK, p)
 }
 
@@ -337,6 +352,20 @@ type resourceProposal struct {
 func (h *Handler) applyProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if !proposalschema.Known(p.EntityKind) {
 		return errUnsupportedKind
+	}
+	// TEMPORARY stale-base guard (see proposal_stale.go): refuse to apply if
+	// the live entity has changed since this proposal's base was
+	// snapshotted, rather than blindly overwriting whatever changed. Reads
+	// via q (the tx-bound Queries already in scope here), so this check sees
+	// the same view as the write that follows it.
+	if p.Operation != models.OpCreate && p.BaseUpdatedAt != nil {
+		cur, err := entityUpdatedAt(ctx, q, p.EntityKind, p.TargetName)
+		if err != nil {
+			return err
+		}
+		if cur == nil || !cur.Equal(*p.BaseUpdatedAt) {
+			return errStaleBase
+		}
 	}
 	// Bring the payload forward to the current schema (no-op if already current)
 	// and re-validate before touching live tables. This is where a proposal that

@@ -1,6 +1,9 @@
 package db
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // VORow is a virtual organization document row.
 type VORow struct {
@@ -25,6 +28,9 @@ type ProjectRow struct {
 	SponsorType      string
 	SponsorName      string
 	Extra            []byte
+	// UpdatedAt is only populated by GetProjectByName, for the proposal
+	// stale-base guard -- other callers leave it zero, unused.
+	UpdatedAt time.Time
 }
 
 // UpsertVO inserts or updates an active VO by name.
