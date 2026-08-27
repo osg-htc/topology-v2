@@ -71,7 +71,7 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	// the state of the world when this proposal branched off.
 	var baseUpdatedAt *time.Time
 	if req.Operation != models.OpCreate && req.TargetName != "" {
-		base = h.snapshotEntity(ctx, req.EntityKind, req.TargetName)
+		base = snapshotEntity(ctx, h.queries, req.EntityKind, req.TargetName)
 		baseUpdatedAt, _ = entityUpdatedAt(ctx, h.queries, req.EntityKind, req.TargetName)
 	}
 	if req.Operation == models.OpUpdate && base != nil {
@@ -353,18 +353,40 @@ func (h *Handler) applyProposal(ctx context.Context, q *db.Queries, p *models.Pr
 	if !proposalschema.Known(p.EntityKind) {
 		return errUnsupportedKind
 	}
-	// TEMPORARY stale-base guard (see proposal_stale.go): refuse to apply if
-	// the live entity has changed since this proposal's base was
-	// snapshotted, rather than blindly overwriting whatever changed. Reads
-	// via q (the tx-bound Queries already in scope here), so this check sees
-	// the same view as the write that follows it.
-	if p.Operation != models.OpCreate && p.BaseUpdatedAt != nil {
-		cur, err := entityUpdatedAt(ctx, q, p.EntityKind, p.TargetName)
-		if err != nil {
+	// Real three-way merge against whatever the live entity independently
+	// became since this proposal's base was captured -- see
+	// proposal_merge3.go. Only meaningful for an update with a real base to
+	// merge against; a bundle sub-op's synthetic *models.Proposal never sets
+	// BaseVersion, so it skips this by construction and keeps today's
+	// unprotected (but also unchanged) behavior -- see the plan's "known
+	// limitations."
+	if p.Operation == models.OpUpdate && p.BaseVersion != nil {
+		if err := q.SetLockTimeout(ctx, 5*time.Second); err != nil {
 			return err
 		}
-		if cur == nil || !cur.Equal(*p.BaseUpdatedAt) {
-			return errStaleBase
+		if err := lockEntityRow(ctx, q, p.EntityKind, p.TargetName); err != nil {
+			return fmt.Errorf("locking %s %q for apply: %w", p.EntityKind, p.TargetName, err)
+		}
+		live := snapshotEntity(ctx, q, p.EntityKind, p.TargetName)
+		baseMap := fromJSONMap(p.BaseVersion)
+		liveMap := fromJSONMap(live)
+		proposedMap := fromJSONMap(p.ProposedState)
+		if baseMap != nil && liveMap != nil && proposedMap != nil {
+			var reconciled map[string]interface{}
+			var conflicts []conflictField
+			if p.EntityKind == models.KindResource {
+				reconciled, conflicts = threeWayMergeResource(baseMap, liveMap, proposedMap)
+			} else {
+				reconciled, conflicts = threeWayMergeFlat("", baseMap, liveMap, proposedMap)
+			}
+			if len(conflicts) > 0 {
+				return errConflict(conflicts)
+			}
+			merged, err := json.Marshal(reconciled)
+			if err != nil {
+				return err
+			}
+			p.ProposedState = merged
 		}
 	}
 	// Bring the payload forward to the current schema (no-op if already current)

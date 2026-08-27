@@ -5,6 +5,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -74,4 +75,36 @@ func (q *Queries) WithTx(ctx context.Context, fn func(tx *Queries) error) error 
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// LockRow takes an explicit SELECT ... FOR UPDATE lock on a single row,
+// using whatever connection q is currently bound to (a plain pool connection
+// or an active transaction). Callers that need to read some "current" state
+// and later write a decision based on it, inside the same transaction, must
+// call this first -- otherwise two concurrent transactions could both read
+// the same pre-change state and compute conflicting decisions from it, with
+// only the final write serializing (by which point the wrong decision was
+// already made). Returns nil if no row matches (nothing to lock against).
+//
+// table/column are always caller-supplied literals from a fixed internal
+// switch, never derived from request input, so building the statement with
+// fmt.Sprintf here carries no injection risk.
+func (q *Queries) LockRow(ctx context.Context, table, column string, value interface{}) error {
+	var dummy int
+	err := q.pool.QueryRow(ctx, fmt.Sprintf(`SELECT 1 FROM %s WHERE %s = $1 FOR UPDATE`, table, column), value).Scan(&dummy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
+// SetLockTimeout bounds how long a subsequent LockRow call (or any other
+// statement) will wait on a held lock before failing, so a stuck concurrent
+// holder produces a clear, fast error instead of hanging the request. Only
+// meaningful when q is bound to an active transaction (SET LOCAL is a no-op
+// outside one) -- call it first, inside the same transaction as the LockRow
+// call it's meant to bound.
+func (q *Queries) SetLockTimeout(ctx context.Context, d time.Duration) error {
+	_, err := q.pool.Exec(ctx, fmt.Sprintf(`SET LOCAL lock_timeout = '%dms'`, d.Milliseconds()))
+	return err
 }
