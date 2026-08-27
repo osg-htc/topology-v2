@@ -81,14 +81,6 @@ function ProposalView() {
         action={<StatusBadge status={p.status} />}
       />
 
-      {p.base_stale && (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          This proposal's base is out of date — the underlying record has
-          changed since this proposal was created. Approving it may
-          overwrite that change.
-        </div>
-      )}
-
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
           <Card>

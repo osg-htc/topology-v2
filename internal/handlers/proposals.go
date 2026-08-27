@@ -66,13 +66,8 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	// field no editing tool has UI for is preserved rather than silently
 	// wiped. See mergeProposedState.
 	var base json.RawMessage
-	// baseUpdatedAt is part of a TEMPORARY stale-base guard -- see
-	// proposal_stale.go -- captured alongside base for the same reason: it's
-	// the state of the world when this proposal branched off.
-	var baseUpdatedAt *time.Time
 	if req.Operation != models.OpCreate && req.TargetName != "" {
 		base = snapshotEntity(ctx, h.queries, req.EntityKind, req.TargetName)
-		baseUpdatedAt, _ = entityUpdatedAt(ctx, h.queries, req.EntityKind, req.TargetName)
 	}
 	if req.Operation == models.OpUpdate && base != nil {
 		req.ProposedState = mergeProposedState(req.EntityKind, base, req.ProposedState)
@@ -97,8 +92,7 @@ func (h *Handler) CreateProposal(w http.ResponseWriter, r *http.Request) {
 	id, err := h.queries.CreateProposal(ctx, db.CreateProposalParams{
 		EntityKind: req.EntityKind, TargetName: req.TargetName, Operation: req.Operation,
 		ProposedState: req.ProposedState, SchemaVersion: schemaVer, BaseVersion: base,
-		BaseUpdatedAt: baseUpdatedAt,
-		Status:        status, CreatedBy: u.ID, Note: req.Note,
+		Status: status, CreatedBy: u.ID, Note: req.Note,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "creating proposal")
@@ -273,15 +267,6 @@ func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	if revs, err := h.queries.ListRevisions(ctx, id); err == nil {
 		p.Revisions = revs
-	}
-	// TEMPORARY stale-base guard (see proposal_stale.go): only worth checking
-	// while the proposal is still undecided -- an applied/rejected/withdrawn
-	// proposal's base staleness no longer matters.
-	if p.Operation != models.OpCreate && p.BaseUpdatedAt != nil &&
-		(p.Status == models.ProposalDraft || p.Status == models.ProposalPending) {
-		if cur, err := entityUpdatedAt(ctx, h.queries, p.EntityKind, p.TargetName); err == nil {
-			p.BaseStale = cur == nil || !cur.Equal(*p.BaseUpdatedAt)
-		}
 	}
 	respondJSON(w, http.StatusOK, p)
 }
