@@ -43,7 +43,14 @@ test("inline parent creation submits an atomic bundle", async ({ page }) => {
   const approve = await page.request.post(`/api/v1/proposals/${id}/approve`);
   expect(approve.ok()).toBeTruthy();
 
-  const detail = await (await page.request.get(`/api/v1/resources/${resName}`)).json();
+  // /api/v1/resources/{id} takes the resource's numeric topology_id, not its
+  // name -- look it up in the name-keyed list first to get that id, the same
+  // two-step a real user follows (search/browse, then open the detail page).
+  const list = await (await page.request.get("/api/v1/resources")).json();
+  const resID = list[resName]?.id;
+  expect(resID).toBeTruthy();
+
+  const detail = await (await page.request.get(`/api/v1/resources/${resID}`)).json();
   expect(detail.name).toBe(resName);
   expect(detail.resource_group).toBe(rg);
   expect(detail.site).toBe(site);

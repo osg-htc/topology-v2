@@ -196,3 +196,97 @@ func TestApplyResourceProposal_RenameUpdatesInPlace(t *testing.T) {
 		}
 	})
 }
+
+// TestApplyBundleProposal_ResourceGroupAndResourceInOneBundle guards a real
+// bug: a bundle's synthetic per-operation *models.Proposal (built by
+// applyBundleProposal) carries no id of its own, since there's no
+// change_proposals row backing it. applyResourceProposal's post-create
+// target_name backfill used that id unconditionally, so any bundle creating
+// a resource (e.g. an inline parent chain: facility -> site -> resource
+// group -> resource, exactly what the "Register a resource" form submits
+// when the user creates new parents inline) failed with a Postgres "invalid
+// input syntax for type uuid" error on every single approval -- caught via
+// the e2e suite's bundle.spec.ts.
+//
+// Requires Postgres reachable at TOPOLOGY_TEST_DATABASE_URL; skipped
+// otherwise, so `go test ./...` stays green without a database.
+func TestApplyBundleProposal_ResourceGroupAndResourceInOneBundle(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run the bundle regression test")
+	}
+
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	actorID, err := q.CreateUser(ctx, db.CreateUserParams{
+		DisplayName: "regtest-bundle-actor", Status: "active", IsProvisioned: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	facID, err := q.InsertFacility(ctx, db.FacilityRow{
+		TopologyID: 900000020, Name: "regtest-bundle-facility", IDExplicit: true,
+	})
+	if err != nil {
+		t.Fatalf("InsertFacility: %v", err)
+	}
+	if _, err := q.InsertSite(ctx, db.SiteRow{
+		TopologyID: 900000021, FacilityID: facID, Name: "regtest-bundle-site", IDExplicit: true,
+	}); err != nil {
+		t.Fatalf("InsertSite: %v", err)
+	}
+
+	// A bundle whose resource operation targets a resource group created by
+	// an earlier operation in the SAME bundle -- the exact shape the
+	// "Register a resource" form submits when the user creates a new
+	// resource group inline.
+	marshal := func(v any) json.RawMessage {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal fixture: %v", err)
+		}
+		return b
+	}
+	bp := bundleProposal{Operations: []bundleOp{
+		{EntityKind: models.KindResourceGroup, Operation: models.OpCreate, ProposedState: marshal(map[string]any{
+			"name": "regtest-bundle-rg", "site": "regtest-bundle-site",
+		})},
+		{EntityKind: models.KindResource, Operation: models.OpCreate, ProposedState: marshal(map[string]any{
+			"name": "regtest-bundle-resource", "resource_group": "regtest-bundle-rg",
+			"resource": map[string]any{"Active": true, "FQDN": "regtest-bundle.example.org"},
+		})},
+	}}
+	state, err := json.Marshal(bp)
+	if err != nil {
+		t.Fatalf("marshal bundle: %v", err)
+	}
+	p := &models.Proposal{ID: "regtest-bundle-proposal-id", EntityKind: models.KindBundle, Operation: models.OpCreate, ProposedState: state}
+
+	if err := q.WithTx(ctx, func(tx *db.Queries) error {
+		return h.applyBundleProposal(ctx, tx, p, actorID)
+	}); err != nil {
+		t.Fatalf("applyBundleProposal: %v", err)
+	}
+
+	if _, err := q.ResourceGroupIDByName(ctx, "regtest-bundle-rg"); err != nil {
+		t.Fatalf("resource group was not created: %v", err)
+	}
+	rows, err := q.ListResources(ctx)
+	if err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	var found *db.ResourceRow
+	for i := range rows {
+		if rows[i].Name == "regtest-bundle-resource" {
+			found = &rows[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("resource was not created")
+	}
+	if found.RGName != "regtest-bundle-rg" {
+		t.Fatalf("resource's resource group = %q, want the bundle's own new group %q", found.RGName, "regtest-bundle-rg")
+	}
+}
