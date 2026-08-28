@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -20,9 +19,6 @@ type CreateProposalParams struct {
 	Operation     string
 	ProposedState json.RawMessage
 	BaseVersion   json.RawMessage
-	// BaseUpdatedAt is part of the TEMPORARY stale-base guard -- see
-	// internal/handlers/proposal_stale.go.
-	BaseUpdatedAt *time.Time
 	Status        string
 	SchemaVersion int
 	CreatedBy     string
@@ -49,10 +45,10 @@ func (q *Queries) CreateProposal(ctx context.Context, p CreateProposalParams) (s
 	err = tx.QueryRow(ctx,
 		`INSERT INTO change_proposals
 		   (entity_kind, target_name, operation, proposed_state, proposed_schema_version,
-		    base_version, base_updated_at, status, created_by)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		    base_version, status, created_by)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
 		p.EntityKind, nullString(p.TargetName), p.Operation, state, schemaVer,
-		nullBytes(p.BaseVersion), p.BaseUpdatedAt, p.Status, p.CreatedBy).Scan(&id)
+		nullBytes(p.BaseVersion), p.Status, p.CreatedBy).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -132,7 +128,7 @@ func scanProposal(row pgx.Row) (*models.Proposal, error) {
 	var target, reviewer, note *string
 	var base []byte
 	err := row.Scan(&p.ID, &p.EntityKind, &target, &p.Operation, &p.ProposedState,
-		&p.SchemaVersion, &base, &p.BaseUpdatedAt, &p.Status, &p.CreatedBy, &reviewer, &note, &p.CreatedAt, &p.UpdatedAt)
+		&p.SchemaVersion, &base, &p.Status, &p.CreatedBy, &reviewer, &note, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -148,10 +144,8 @@ func scanProposal(row pgx.Row) (*models.Proposal, error) {
 	return p, nil
 }
 
-// base_updated_at is part of the TEMPORARY stale-base guard -- see
-// internal/handlers/proposal_stale.go.
 const proposalCols = `id, entity_kind, target_name, operation, proposed_state,
-	proposed_schema_version, base_version, base_updated_at, status, created_by,
+	proposed_schema_version, base_version, status, created_by,
 	assigned_reviewer, review_note, created_at, updated_at`
 
 // GetProposal fetches one proposal (without revisions).

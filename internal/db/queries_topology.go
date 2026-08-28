@@ -18,8 +18,8 @@ type FacilityRow struct {
 	InstitutionID string
 	Extra         []byte
 	IDExplicit    bool
-	// UpdatedAt is only populated by GetFacilityRow, for the proposal
-	// stale-base guard -- List* callers leave it zero, unused.
+	// UpdatedAt is only populated by GetFacilityRow -- List* callers leave
+	// it zero.
 	UpdatedAt time.Time
 }
 
@@ -41,8 +41,8 @@ type SiteRow struct {
 	Longitude    *float64
 	Extra        []byte
 	IDExplicit   bool
-	// UpdatedAt is only populated by GetSiteRow, for the proposal stale-base
-	// guard -- List* callers leave it zero, unused.
+	// UpdatedAt is only populated by GetSiteRow -- List* callers leave it
+	// zero.
 	UpdatedAt time.Time
 }
 
@@ -57,8 +57,8 @@ type ResourceGroupRow struct {
 	GroupDescription string
 	Extra            []byte
 	IDExplicit       bool
-	// UpdatedAt is only populated by GetResourceGroupRow, for the proposal
-	// stale-base guard -- List* callers leave it zero, unused.
+	// UpdatedAt is only populated by GetResourceGroupRow -- List* callers
+	// leave it zero.
 	UpdatedAt time.Time
 }
 
@@ -78,8 +78,8 @@ type ResourceRow struct {
 	WLCGInformation []byte
 	Extra           []byte
 	IDExplicit      bool
-	// UpdatedAt is only populated by GetResourceRow, for the proposal
-	// stale-base guard -- List* callers leave it zero, unused.
+	// UpdatedAt is only populated by GetResourceRow -- List* callers leave
+	// it zero.
 	UpdatedAt time.Time
 }
 

@@ -5,39 +5,74 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/topology"
 )
 
-// snapshotEntity builds a "before" snapshot of an entity's current live
-// state, in the exact JSON shape its own proposed_state already uses -- so
-// the two can be rendered side by side (and, later, diffed) directly. Called
-// once, at proposal creation time (the actual branch point) -- see
-// CreateProposal -- never on revise, since "branched from" means the moment
-// of creation, not each subsequent draft edit.
-func (h *Handler) snapshotEntity(ctx context.Context, entityKind, targetName string) json.RawMessage {
+// lockEntityRow takes a row lock on the entity an update proposal targets,
+// before anything reads its "live" state for the three-way merge in
+// applyProposal -- see proposal_merge3.go. Without this, two concurrent
+// applies could both read live state before either commits and each compute
+// a merge decision against the same stale view, with only the final write
+// serializing (by which point the wrong decision was already made). Mirrors
+// snapshotEntity's per-kind dispatch shape. A no-op (nil error) for kinds
+// with no key to lock (downtime, bundle) or an empty targetName.
+func lockEntityRow(ctx context.Context, q *db.Queries, entityKind, targetName string) error {
+	if targetName == "" {
+		return nil
+	}
 	switch entityKind {
 	case models.KindResource:
-		return h.snapshotResourceState(ctx, targetName)
+		topID, err := strconv.ParseInt(targetName, 10, 64)
+		if err != nil {
+			return nil
+		}
+		return q.LockRow(ctx, "resources", "topology_id", topID)
 	case models.KindResourceGroup:
-		return h.snapshotResourceGroupState(ctx, targetName)
+		return q.LockRow(ctx, "resource_groups", "name", targetName)
 	case models.KindSite:
-		return h.snapshotSiteState(ctx, targetName)
+		return q.LockRow(ctx, "sites", "name", targetName)
 	case models.KindFacility:
-		return h.snapshotFacilityState(ctx, targetName)
+		return q.LockRow(ctx, "facilities", "name", targetName)
 	case models.KindProject:
-		return h.snapshotProjectState(ctx, targetName)
+		return q.LockRow(ctx, "projects", "name", targetName)
+	default:
+		return nil
+	}
+}
+
+// snapshotEntity builds a snapshot of an entity's live state, in the exact
+// JSON shape its own proposed_state already uses -- so it's directly
+// comparable/diffable against a proposal's base_version or proposed_state.
+// Takes an explicit q rather than closing over a Handler's pool so it can
+// run either outside any transaction (CreateProposal, capturing the
+// "before" at the actual branch point) or inside the apply transaction
+// (the three-way merge's "live" read, which must see the same view as the
+// write that follows it -- see proposal_merge3.go).
+func snapshotEntity(ctx context.Context, q *db.Queries, entityKind, targetName string) json.RawMessage {
+	switch entityKind {
+	case models.KindResource:
+		return snapshotResourceState(ctx, q, targetName)
+	case models.KindResourceGroup:
+		return snapshotResourceGroupState(ctx, q, targetName)
+	case models.KindSite:
+		return snapshotSiteState(ctx, q, targetName)
+	case models.KindFacility:
+		return snapshotFacilityState(ctx, q, targetName)
+	case models.KindProject:
+		return snapshotProjectState(ctx, q, targetName)
 	default:
 		return nil // downtime, bundle: not yet supported -- unchanged from before
 	}
 }
 
-func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) json.RawMessage {
+func snapshotResourceState(ctx context.Context, q *db.Queries, targetName string) json.RawMessage {
 	topID, err := strconv.ParseInt(targetName, 10, 64)
 	if err != nil {
 		return nil
 	}
-	row, err := h.queries.GetResourceRow(ctx, topID)
+	row, err := q.GetResourceRow(ctx, topID)
 	if err != nil {
 		return nil
 	}
@@ -54,7 +89,7 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 	}
 	// Deliberately no ID: a proposal's own Resource payload never carries
 	// one, so leaving it out keeps the two columns comparable field-for-field.
-	svcs, err := h.queries.ListResourceServices(ctx, topID)
+	svcs, err := q.ListResourceServices(ctx, topID)
 	if err != nil {
 		return nil
 	}
@@ -64,7 +99,7 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 			res.Services[s.ServiceName] = topology.ServiceFromBlob(s.Description, s.Details)
 		}
 	}
-	contacts, err := h.queries.ListResourceContacts(ctx, topID)
+	contacts, err := q.ListResourceContacts(ctx, topID)
 	if err != nil {
 		return nil
 	}
@@ -84,12 +119,12 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 	return b
 }
 
-func (h *Handler) snapshotResourceGroupState(ctx context.Context, targetName string) json.RawMessage {
-	row, err := h.queries.GetResourceGroupRow(ctx, targetName)
+func snapshotResourceGroupState(ctx context.Context, q *db.Queries, targetName string) json.RawMessage {
+	row, err := q.GetResourceGroupRow(ctx, targetName)
 	if err != nil {
 		return nil
 	}
-	contacts, err := h.queries.ListEntityContacts(ctx, models.KindResourceGroup, targetName)
+	contacts, err := q.ListEntityContacts(ctx, models.KindResourceGroup, targetName)
 	if err != nil {
 		return nil
 	}
@@ -103,12 +138,12 @@ func (h *Handler) snapshotResourceGroupState(ctx context.Context, targetName str
 	return b
 }
 
-func (h *Handler) snapshotSiteState(ctx context.Context, targetName string) json.RawMessage {
-	row, err := h.queries.GetSiteRow(ctx, targetName)
+func snapshotSiteState(ctx context.Context, q *db.Queries, targetName string) json.RawMessage {
+	row, err := q.GetSiteRow(ctx, targetName)
 	if err != nil {
 		return nil
 	}
-	contacts, err := h.queries.ListEntityContacts(ctx, models.KindSite, targetName)
+	contacts, err := q.ListEntityContacts(ctx, models.KindSite, targetName)
 	if err != nil {
 		return nil
 	}
@@ -124,12 +159,12 @@ func (h *Handler) snapshotSiteState(ctx context.Context, targetName string) json
 	return b
 }
 
-func (h *Handler) snapshotFacilityState(ctx context.Context, targetName string) json.RawMessage {
-	row, err := h.queries.GetFacilityRow(ctx, targetName)
+func snapshotFacilityState(ctx context.Context, q *db.Queries, targetName string) json.RawMessage {
+	row, err := q.GetFacilityRow(ctx, targetName)
 	if err != nil {
 		return nil
 	}
-	contacts, err := h.queries.ListEntityContacts(ctx, models.KindFacility, targetName)
+	contacts, err := q.ListEntityContacts(ctx, models.KindFacility, targetName)
 	if err != nil {
 		return nil
 	}
@@ -140,8 +175,8 @@ func (h *Handler) snapshotFacilityState(ctx context.Context, targetName string) 
 	return b
 }
 
-func (h *Handler) snapshotProjectState(ctx context.Context, targetName string) json.RawMessage {
-	row, err := h.queries.GetProjectByName(ctx, targetName)
+func snapshotProjectState(ctx context.Context, q *db.Queries, targetName string) json.RawMessage {
+	row, err := q.GetProjectByName(ctx, targetName)
 	if err != nil {
 		return nil
 	}
