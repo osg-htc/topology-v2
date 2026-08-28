@@ -767,6 +767,16 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 	// later ListProposalsByEntity(resource, topID) lookup. q is already the
 	// tx-bound Queries from ApproveProposal's WithTx, so this is atomic with
 	// the resource's creation.
+	//
+	// p.ID is empty for a bundle sub-operation (applyBundleProposal builds a
+	// synthetic *models.Proposal with no row of its own to update) -- skip
+	// the backfill rather than run UPDATE ... WHERE id = '', which fails on
+	// the id column's uuid type. The bundle's own top-level row still won't
+	// surface from that lookup either way (its entity_kind is "bundle", not
+	// "resource"), so nothing already worked here that this changes.
+	if p.ID == "" {
+		return nil
+	}
 	return q.UpdateProposalTargetName(ctx, p.ID, strconv.FormatInt(topID, 10))
 }
 
