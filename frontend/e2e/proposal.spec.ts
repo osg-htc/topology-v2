@@ -46,3 +46,63 @@ test("schema validation blocks an invalid resource (no FQDN)", async ({ page }) 
   expect(res.status()).toBe(400);
   expect(await res.text()).toContain("FQDN");
 });
+
+// An administrator is both a valid creator and a valid reviewer, so this is
+// exactly the case that hit the Actions-card bug: with no button gated to
+// render on a decided proposal, the empty-state check keyed only on role
+// (never on status) left the whole card blank for this viewer. Also checks
+// that a second, still-pending proposal on the same resource is excluded
+// from its entity history panel -- a still-pending edit isn't history yet.
+test("approved proposal's Actions card explains it's decided; pending sibling stays out of entity history", async ({
+  page,
+}) => {
+  await devLogin(page, "administrator", "admin@example.org");
+
+  const rgs = await (await page.request.get("/api/v1/resource-groups")).json();
+  test.skip(!rgs || rgs.length === 0, "needs at least one resource group (import data first)");
+  const rgName: string = rgs[0].name;
+
+  const unique = `E2E_Actions_${Date.now()}`;
+  const host = `${unique.toLowerCase().replace(/_/g, "-")}.example.org`;
+
+  const createRes = await page.request.post("/api/v1/proposals", {
+    data: {
+      entity_kind: "resource",
+      operation: "create",
+      submit: true,
+      proposed_state: { name: unique, resource_group: rgName, resource: { FQDN: host, Active: true } },
+    },
+  });
+  expect(createRes.ok()).toBeTruthy();
+  const { id } = await createRes.json();
+
+  const approveRes = await page.request.post(`/api/v1/proposals/${id}/approve`);
+  expect(approveRes.ok()).toBeTruthy();
+
+  const proposal = await (await page.request.get(`/api/v1/proposals/${id}`)).json();
+  const targetName: string = proposal.target_name;
+
+  // A second, still-pending update on the same resource -- must not show on
+  // its history panel below.
+  const pendingRes = await page.request.post("/api/v1/proposals", {
+    data: {
+      entity_kind: "resource",
+      operation: "update",
+      target_name: targetName,
+      submit: true,
+      proposed_state: {
+        name: unique,
+        resource_group: rgName,
+        resource: { FQDN: host, Active: true, Description: "a pending edit" },
+      },
+    },
+  });
+  expect(pendingRes.ok()).toBeTruthy();
+
+  await page.goto(`/proposals/view?id=${id}`);
+  await expect(page.getByText(/already been applied/)).toBeVisible();
+
+  await page.goto(`/resources/detail?id=${targetName}`);
+  await expect(page.getByText("Edit history")).toBeVisible();
+  await expect(page.getByText("pending", { exact: true })).not.toBeVisible();
+});
