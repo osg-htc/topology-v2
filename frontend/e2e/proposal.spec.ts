@@ -17,13 +17,15 @@ test("register a resource creates a proposal", async ({ page }) => {
   await page.getByPlaceholder("Search resource groups…").fill(rgName);
   // Host names must be valid DNS names (no underscores).
   await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase().replace(/_/g, "-")}.example.org`);
-  // A contact is required for a complete registration. As an admin the person
-  // field is a live user search ("Search people…"); external ids are no longer
-  // shown — picking a name is enough.
-  await page.getByPlaceholder("Search people…").first().fill("E2E Admin");
+  // A contact is required for a complete registration, and must be a real,
+  // picked person -- typing alone never resolves to one. "Dev User" matches
+  // the signed-in dev-login account itself (its display name when no
+  // explicit one is set); which real match gets clicked doesn't matter,
+  // only that it's a real one.
+  await page.getByPlaceholder("Search people…").first().fill("Dev User");
+  await page.getByRole("button", { name: "Dev User" }).first().click();
 
   const submit = page.getByRole("button", { name: "Submit for review" });
-  await expect(submit).toBeEnabled();
   await submit.click();
 
   await expect(page).toHaveURL(/\/proposals\/view/);
@@ -31,6 +33,33 @@ test("register a resource creates a proposal", async ({ page }) => {
   // The structured proposed-change view shows the resource name exactly (the
   // FQDN also contains it, so match exactly).
   await expect(page.getByText(unique, { exact: true })).toBeVisible();
+});
+
+// Direct regression test for the bug the contact picker rewrite fixes: a
+// typed name that's never picked from the results list must never silently
+// resolve to a contact -- submission must stay blocked, not proceed with an
+// unlinked name.
+test("a typed contact name that's never picked from results blocks submission", async ({ page }) => {
+  await devLogin(page, "administrator", "admin@example.org");
+
+  const rgs = await (await page.request.get("/api/v1/resource-groups")).json();
+  test.skip(!rgs || rgs.length === 0, "needs at least one resource group (import data first)");
+  const rgName: string = rgs[0].name;
+
+  await page.goto("/proposals/new");
+  const unique = `E2E_Unlinked_${Date.now()}`;
+  await page.getByPlaceholder("e.g. UChicago_OSGConnect_ap20").fill(unique);
+  await page.getByPlaceholder("Search resource groups…").fill(rgName);
+  await page.getByPlaceholder("host.example.org").fill(`${unique.toLowerCase().replace(/_/g, "-")}.example.org`);
+  // Type a name that won't match any real user, and never click a result.
+  await page.getByPlaceholder("Search people…").first().fill("Nobody Real Zzyx");
+
+  await page.getByText("Not linked to an account").waitFor();
+
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  // Submission must be rejected client-side, not silently proceed.
+  await expect(page.getByText("Please fix the highlighted fields.")).toBeVisible();
+  await expect(page).not.toHaveURL(/\/proposals\/view/);
 });
 
 test("schema validation blocks an invalid resource (no FQDN)", async ({ page }) => {

@@ -17,6 +17,11 @@ func rankForOrder(n int) string {
 // EntityContact is a contact on a resource group / site / facility. Rank is
 // derived from list order at apply time (see ReplaceEntityContacts); callers
 // supply contacts already in the desired order and may leave Rank empty.
+// ID is the one identifier a contact has: the same v1 scheme (SHA1 of a
+// lowercased email, or an OSG-prefixed CILogon id -- see emailSHA1 in
+// internal/handlers/auth.go). The proposal-apply path requires it to match a
+// real users.legacy_contact_id (see requireResolvedContacts in
+// internal/handlers/proposals.go) -- there is no separate v2-native id.
 type EntityContact struct {
 	ContactType string `json:"contact_type"`
 	Rank        string `json:"rank"`
@@ -26,7 +31,10 @@ type EntityContact struct {
 
 // ReplaceEntityContacts sets the contacts for a parent entity (resource_group /
 // site / facility): soft-deletes the current set and inserts the new one,
-// bootstrapping a provisioned user per contact.
+// bootstrapping a provisioned user per contact (a no-op find, not a create,
+// for the ordinary proposal path -- ID has already been validated to match a
+// real users.legacy_contact_id by the time this runs; see
+// requireResolvedContacts).
 func (q *Queries) ReplaceEntityContacts(ctx context.Context, kind, targetName, newName string, contacts []EntityContact, byUser string) error {
 	if _, err := q.pool.Exec(ctx,
 		`UPDATE entity_contacts SET deleted_at = NOW(), deleted_by = $3

@@ -1,63 +1,88 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { api, ContactableUser } from "@/lib/api";
 import { input } from "./ui";
 
-// ContactPersonInput selects a contact person. Admins search ALL users live;
-// non-admins pick from a supplied list of known contacts (e.g. parent-scoped).
-// On selecting a match, the contact id is filled automatically.
+// ContactPersonInput selects a contact person by searching real users
+// (GET /users/search, safe for any authenticated user) and requires an
+// explicit pick from the results -- typing alone never resolves to anyone.
+// Mirrors InstitutionPicker's selected/open pattern: a name that doesn't get
+// clicked from the list must not silently keep whatever id was there before,
+// so every keystroke clears the resolved reference rather than carrying over
+// a stale one.
 export function ContactPersonInput({
   name,
   id,
   onChange,
-  isAdmin,
-  fallback,
 }: {
   name: string;
   id: string;
   onChange: (name: string, id: string) => void;
-  isAdmin: boolean;
-  fallback: { name: string; id: string }[];
 }) {
-  const [q, setQ] = useState(name);
+  const [text, setText] = useState(name);
+  // `selected` is a confirmed pick; starts set only if this row already has
+  // a real id (a prior pick, or an already-linked stored contact). A legacy
+  // row with a display name but no id starts unselected, so editing it
+  // requires searching and picking a real match to confirm it.
+  const [selected, setSelected] = useState<ContactableUser | null>(
+    id ? { id, display_name: name } : null,
+  );
+  const [open, setOpen] = useState(false);
 
-  // Admin: live search across all users. Non-admin: filter the fallback list.
+  const q = text.trim();
   const { data: results } = useQuery({
     queryKey: ["user-search", q],
-    queryFn: () => api.admin.searchUsers(q),
-    enabled: isAdmin && q.trim().length >= 2,
+    queryFn: () => api.usersSearch(q),
+    enabled: q.length >= 2 && !selected,
   });
 
-  const options: { name: string; id: string }[] = isAdmin
-    ? (results ?? []).map((u) => ({ name: u.display_name, id: u.legacy_contact_id }))
-    : fallback.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())).slice(0, 50);
-
-  const listId = `people-${name}-${id}`;
-
-  const pick = (val: string) => {
-    const match = options.find((o) => o.name === val);
-    setQ(val);
-    onChange(val, match ? match.id : id);
+  const pick = (u: ContactableUser) => {
+    setSelected(u);
+    setText(u.display_name);
+    setOpen(false);
+    onChange(u.display_name, u.id);
   };
 
+  const onType = (v: string) => {
+    setText(v);
+    setSelected(null);
+    setOpen(true);
+    onChange(v, "");
+  };
+
+  const unlinked = !selected && text.trim() !== "";
+
   return (
-    <>
-      <input
-        className={input}
-        list={listId}
-        placeholder={isAdmin ? "Search people…" : "Contact"}
-        value={q}
-        onChange={(e) => pick(e.target.value)}
-      />
-      <datalist id={listId}>
-        {options.map((o) => (
-          <option key={`${o.name}-${o.id}`} value={o.name}>
-            {o.id}
-          </option>
-        ))}
-      </datalist>
-    </>
+    <div>
+      <div className="relative">
+        <input
+          className={input}
+          value={text}
+          onChange={(e) => onType(e.target.value)}
+          onFocus={() => !selected && setOpen(true)}
+          placeholder="Search people…"
+        />
+        {open && !selected && (results ?? []).length > 0 && (
+          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">
+            {(results ?? []).map((u) => (
+              <li key={u.id}>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-sm hover:bg-brand-50"
+                  onClick={() => pick(u)}
+                >
+                  {u.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {unlinked && (
+        <p className="mt-1 text-xs text-amber-600">Not linked to an account — search and select to confirm.</p>
+      )}
+    </div>
   );
 }

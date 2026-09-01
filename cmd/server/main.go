@@ -91,8 +91,9 @@ func runImportTree(args []string) error {
 }
 
 // runBackfillContacts bootstraps provisioned users from existing contacts and
-// links resource_contacts.user_id (idempotent; for data imported before the
-// contacts-as-users change).
+// links resource_contacts.user_id and entity_contacts.user_id (idempotent;
+// for data imported before the contacts-as-users change, and for backfilling
+// once contact identity resolution becomes enforced at apply time).
 func runBackfillContacts() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -107,11 +108,17 @@ func runBackfillContacts() error {
 		return err
 	}
 	defer pool.Close()
-	linked, err := db.New(pool).BackfillContactUsers(ctx)
+	q := db.New(pool)
+	resLinked, err := q.BackfillContactUsers(ctx)
 	if err != nil {
 		return err
 	}
-	log.Info().Int("linked", linked).Msg("contact users backfilled")
+	entLinked, err := q.BackfillEntityContactUsers(ctx)
+	if err != nil {
+		return err
+	}
+	log.Info().Int("resource_contacts_linked", resLinked).Int("entity_contacts_linked", entLinked).
+		Msg("contact users backfilled")
 	return nil
 }
 

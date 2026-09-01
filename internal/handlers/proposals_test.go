@@ -104,7 +104,16 @@ func TestApplyResourceProposal_RenameUpdatesInPlace(t *testing.T) {
 		}
 	})
 
+	contactID := emailSHA1("test-contact@example.org")
 	t.Run("apply rename", func(t *testing.T) {
+		// A contact must resolve to a real user (see requireResolvedContacts) --
+		// seed one, keyed by the same legacy-contact-id scheme, to stand in
+		// for "Test Contact" being picked in the form.
+		if _, err := q.CreateUser(ctx, db.CreateUserParams{
+			DisplayName: "Test Contact", Status: "active", IsProvisioned: true, LegacyContactID: contactID,
+		}); err != nil {
+			t.Fatalf("CreateUser (contact): %v", err)
+		}
 		// Mirrors the real edit form: it prefills and resends the *full*
 		// resource state (services/contacts included), changing only the
 		// name -- the apply path replaces children from whatever the
@@ -122,7 +131,7 @@ func TestApplyResourceProposal_RenameUpdatesInPlace(t *testing.T) {
 				},
 				ContactLists: map[string]map[string]topology.Contact{
 					"Administrative Contact": {
-						"Primary": {Name: "Test Contact"},
+						"Primary": {Name: "Test Contact", ID: contactID},
 					},
 				},
 			},
@@ -193,6 +202,163 @@ func TestApplyResourceProposal_RenameUpdatesInPlace(t *testing.T) {
 		}
 		if len(contacts) != 1 || contacts[0].ContactName != "Test Contact" {
 			t.Fatalf("resource_contacts not preserved across rename: %+v", contacts)
+		}
+		if contacts[0].ContactID != contactID {
+			t.Fatalf("ListResourceContacts ContactID = %q, want %q", contacts[0].ContactID, contactID)
+		}
+	})
+}
+
+// TestApplyFacilityProposal_ContactMustResolveToRealUser guards the core fix:
+// a contact with no ID, or an ID that doesn't match a real user's
+// legacy_contact_id, must reject the apply -- mirroring how a bad
+// institution_id already does. requireResolvedContacts is shared verbatim by
+// applyResourceGroupProposal/applySiteProposal/applyFacilityProposal, so
+// covering facility here covers the same code path for the other two.
+func TestApplyFacilityProposal_ContactMustResolveToRealUser(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	actorID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "regtest-actor", Status: "active", IsProvisioned: true})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := q.UpsertInstitution(ctx, "https://example.org/iid/regtest", "Regtest University", ""); err != nil {
+		t.Fatalf("UpsertInstitution: %v", err)
+	}
+
+	marshal := func(v any) json.RawMessage {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal fixture: %v", err)
+		}
+		return b
+	}
+
+	t.Run("missing ID is rejected", func(t *testing.T) {
+		p := &models.Proposal{
+			EntityKind: models.KindFacility, Operation: models.OpCreate,
+			ProposedState: marshal(map[string]any{
+				"name": "regtest-fac-missing-user", "institution_id": "https://example.org/iid/regtest",
+				"contacts": []map[string]any{{"contact_type": "Administrative Contact", "name": "Nobody"}},
+			}),
+		}
+		err := h.applyFacilityProposal(ctx, q, p, actorID)
+		if err == nil {
+			t.Fatalf("applyFacilityProposal: expected rejection for a contact with no ID, got success")
+		}
+	})
+
+	t.Run("nonexistent ID is rejected", func(t *testing.T) {
+		p := &models.Proposal{
+			EntityKind: models.KindFacility, Operation: models.OpCreate,
+			ProposedState: marshal(map[string]any{
+				"name": "regtest-fac-bad-user", "institution_id": "https://example.org/iid/regtest",
+				"contacts": []map[string]any{{"contact_type": "Administrative Contact", "name": "Ghost", "id": "no-such-legacy-id"}},
+			}),
+		}
+		err := h.applyFacilityProposal(ctx, q, p, actorID)
+		if err == nil {
+			t.Fatalf("applyFacilityProposal: expected rejection for a nonexistent ID, got success")
+		}
+	})
+
+	t.Run("real ID is accepted", func(t *testing.T) {
+		contactID := emailSHA1("real-person@example.org")
+		if _, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "Real Person", Status: "active", LegacyContactID: contactID}); err != nil {
+			t.Fatalf("CreateUser (contact): %v", err)
+		}
+		p := &models.Proposal{
+			EntityKind: models.KindFacility, Operation: models.OpCreate,
+			ProposedState: marshal(map[string]any{
+				"name": "regtest-fac-good-user", "institution_id": "https://example.org/iid/regtest",
+				"contacts": []map[string]any{{"contact_type": "Administrative Contact", "name": "Real Person", "id": contactID}},
+			}),
+		}
+		if err := h.applyFacilityProposal(ctx, q, p, actorID); err != nil {
+			t.Fatalf("applyFacilityProposal: expected a resolved contact to be accepted, got: %v", err)
+		}
+	})
+}
+
+// TestApplyResourceProposal_ContactRankValidation covers
+// requireResolvedResourceContacts' two checks specific to the resource
+// ContactLists map shape: an out-of-range/invalid rank key is rejected (the
+// only backend-enforceable half of the resource form's same-type collision
+// guard -- see buildResource() in proposals/new/page.tsx), and a resolved
+// contact under a valid rank is accepted.
+func TestApplyResourceProposal_ContactRankValidation(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	actorID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "regtest-actor", Status: "active", IsProvisioned: true})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	facID, err := q.InsertFacility(ctx, db.FacilityRow{TopologyID: 900000070, Name: "regtest-rank-facility", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertFacility: %v", err)
+	}
+	siteID, err := q.InsertSite(ctx, db.SiteRow{TopologyID: 900000071, FacilityID: facID, Name: "regtest-rank-site", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertSite: %v", err)
+	}
+	if _, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{GroupID: 900000072, SiteID: siteID, Name: "regtest-rank-rg", IDExplicit: true}); err != nil {
+		t.Fatalf("InsertResourceGroup: %v", err)
+	}
+
+	actorLegacyID := emailSHA1("regtest-actor@example.org")
+	if err := q.SetLegacyContactIDIfMissing(ctx, actorID, actorLegacyID); err != nil {
+		t.Fatalf("SetLegacyContactIDIfMissing: %v", err)
+	}
+
+	t.Run("invalid rank key is rejected", func(t *testing.T) {
+		rp := resourceProposal{
+			ResourceGroup: "regtest-rank-rg", Name: "regtest-rank-res-bad",
+			Resource: topology.Resource{
+				FQDN: "regtest-rank-bad.example.org",
+				ContactLists: map[string]map[string]topology.Contact{
+					"Administrative Contact": {"Quaternary": {Name: "Nobody", ID: actorLegacyID}},
+				},
+			},
+		}
+		state, err := json.Marshal(rp)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		p := &models.Proposal{EntityKind: models.KindResource, Operation: models.OpCreate, ProposedState: state}
+		if err := h.applyResourceProposal(ctx, q, p, actorID); err == nil {
+			t.Fatalf("applyResourceProposal: expected rejection for rank %q, got success", "Quaternary")
+		}
+	})
+
+	t.Run("valid rank with a resolved contact is accepted", func(t *testing.T) {
+		rp := resourceProposal{
+			ResourceGroup: "regtest-rank-rg", Name: "regtest-rank-res-good",
+			Resource: topology.Resource{
+				FQDN: "regtest-rank-good.example.org",
+				ContactLists: map[string]map[string]topology.Contact{
+					"Administrative Contact": {"Primary": {Name: "regtest-actor", ID: actorLegacyID}},
+				},
+			},
+		}
+		state, err := json.Marshal(rp)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		p := &models.Proposal{EntityKind: models.KindResource, Operation: models.OpCreate, ProposedState: state}
+		if err := h.applyResourceProposal(ctx, q, p, actorID); err != nil {
+			t.Fatalf("applyResourceProposal: expected a resolved contact under a valid rank to be accepted, got: %v", err)
 		}
 	})
 }

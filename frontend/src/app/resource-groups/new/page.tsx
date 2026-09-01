@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input, label } from "@/components/ui";
-import { EntityContactsEditor, fromEntityContacts, toEntityContacts, pendingInviteIds, ContactRow } from "@/components/EntityContactsEditor";
+import { EntityContactsEditor, fromEntityContacts, toEntityContacts, pendingInviteIds, allContactsResolved, ContactRow } from "@/components/EntityContactsEditor";
 
 function NewRGForm() {
   const router = useRouter();
@@ -128,7 +128,7 @@ function NewRGForm() {
 
       {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
       <div className="mt-4 flex gap-3">
-        <button className={btn} disabled={busy || !name || !site} onClick={() => submit(false)}>
+        <button className={btn} disabled={busy || !name || !site || !allContactsResolved(contacts)} onClick={() => submit(false)}>
           Submit for review
         </button>
         <button className={btnSecondary} disabled={busy || !name} onClick={() => submit(true)}>

@@ -116,6 +116,7 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 			r.Use(h.RequireAuth)
 			r.Get("/dashboard", h.DashboardHandler)
 			r.Get("/user-labels", h.UserLabelsHandler)
+			r.Get("/users/search", h.SearchContactableUsersHandler)
 
 			r.Route("/proposals", func(r chi.Router) {
 				r.Post("/", h.CreateProposal)

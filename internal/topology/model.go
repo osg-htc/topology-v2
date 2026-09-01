@@ -96,6 +96,11 @@ type Resource struct {
 }
 
 // Contact is one entry in a ContactLists rank (Primary/Secondary/Tertiary).
+// ID is the one identifier a contact has -- the same v1 scheme (SHA1 of a
+// lowercased email, or an OSG-prefixed CILogon id -- see emailSHA1 in
+// internal/handlers/auth.go). The proposal-apply path requires it to match a
+// real users.legacy_contact_id (see requireResolvedContacts in
+// internal/handlers/proposals.go).
 type Contact struct {
 	Name string `yaml:"Name,omitempty"`
 	ID   string `yaml:"ID,omitempty"`

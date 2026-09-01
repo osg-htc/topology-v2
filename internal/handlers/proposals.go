@@ -571,6 +571,54 @@ func sponsorTypeName(sponsor map[string]interface{}) (string, string) {
 	return "", ""
 }
 
+// requireResolvedContacts rejects any non-blank contact whose ID doesn't
+// resolve to a real, existing users row -- mirroring applyFacilityProposal's
+// InstitutionExists check: a contact must reference something real, verified
+// at apply time, not just accepted as free text. Skips fully-blank rows,
+// matching ReplaceEntityContacts' own skip rule, so an editor that never
+// touches a contact slot doesn't trip this on unrelated fields.
+func requireResolvedContacts(ctx context.Context, q *db.Queries, contacts []db.EntityContact) error {
+	for _, c := range contacts {
+		if c.Name == "" && c.ID == "" {
+			continue
+		}
+		if ok, err := q.LegacyContactIDExists(ctx, c.ID); err != nil {
+			return err
+		} else if !ok {
+			return fmt.Errorf("contact %q is not linked to a known person — pick an existing one or invite a new one", c.Name)
+		}
+	}
+	return nil
+}
+
+// validContactRanks bounds a resource's ContactLists to the same three ranks
+// the rest of the app assumes everywhere (rankForOrder, RANKS in the
+// frontend). The ordinary resource form can never produce anything else;
+// this exists to reject a crafted "advanced JSON" payload that tries to.
+var validContactRanks = map[string]bool{"Primary": true, "Secondary": true, "Tertiary": true}
+
+// requireResolvedResourceContacts is requireResolvedContacts for a
+// resource's ContactLists map shape (map[contact_type]map[rank]Contact),
+// with an added rank-key check -- see validContactRanks.
+func requireResolvedResourceContacts(ctx context.Context, q *db.Queries, lists map[string]map[string]topology.Contact) error {
+	for ctype, ranks := range lists {
+		for rank, c := range ranks {
+			if !validContactRanks[rank] {
+				return fmt.Errorf("contact rank %q for %q is not valid — must be Primary, Secondary, or Tertiary", rank, ctype)
+			}
+			if c.Name == "" && c.ID == "" {
+				continue
+			}
+			if ok, err := q.LegacyContactIDExists(ctx, c.ID); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("contact %q is not linked to a known person — pick an existing one or invite a new one", c.Name)
+			}
+		}
+	}
+	return nil
+}
+
 type rgProposal struct {
 	Name             string             `json:"name"`
 	Site             string             `json:"site"`
@@ -586,6 +634,9 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 	}
 	var rp rgProposal
 	if err := json.Unmarshal(p.ProposedState, &rp); err != nil {
+		return err
+	}
+	if err := requireResolvedContacts(ctx, q, rp.Contacts); err != nil {
 		return err
 	}
 	siteID, err := q.SiteIDByName(ctx, rp.Site)
@@ -643,6 +694,9 @@ func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *model
 	if err := json.Unmarshal(p.ProposedState, &sp); err != nil {
 		return err
 	}
+	if err := requireResolvedContacts(ctx, q, sp.Contacts); err != nil {
+		return err
+	}
 	facID, err := q.FacilityIDByName(ctx, sp.Facility)
 	if err != nil {
 		return errors.New("facility not found: " + sp.Facility)
@@ -696,6 +750,9 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 	} else if !ok {
 		return fmt.Errorf("institution %q is not in the registry — register it first", fp.InstitutionID)
 	}
+	if err := requireResolvedContacts(ctx, q, fp.Contacts); err != nil {
+		return err
+	}
 	if p.Operation == models.OpUpdate {
 		if err := q.UpdateFacilityFields(ctx, p.TargetName, fp.Name, fp.InstitutionID); err != nil {
 			return err
@@ -745,6 +802,9 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 	}
 	if rp.Name == "" || rp.ResourceGroup == "" {
 		return errBadProposalState
+	}
+	if err := requireResolvedResourceContacts(ctx, q, rp.Resource.ContactLists); err != nil {
+		return err
 	}
 	rgID, err := q.ResourceGroupIDByName(ctx, rp.ResourceGroup)
 	if err != nil {

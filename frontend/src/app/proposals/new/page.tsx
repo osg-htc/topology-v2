@@ -27,7 +27,11 @@ const isHostname = (h: string) => HOSTNAME_RE.test(h.trim());
 // Rank is derived from a contact's order within its type (1st = Primary, …); the
 // UI only exposes ordering. External ids are never shown — a contact is either
 // picked from existing users or onboarded via an invite (invitePending).
+// Capped at 3 rows per type in this form (see MAX_PER_TYPE below): the wire
+// shape (map[type][rank]Contact) can only hold one entry per rank, so a 4th
+// same-type row would silently overwrite the 3rd rather than erroring.
 type ContactRow = { type: string; name: string; id: string; inviteId?: string; invitePending?: boolean; inviteUrl?: string };
+const MAX_PER_TYPE = RANKS.length;
 type ServiceRow = { name: string; description: string };
 
 function NewResourceForm() {
@@ -90,13 +94,19 @@ function NewResourceForm() {
   const { data: serviceNames } = useQuery({ queryKey: ["service-names"], queryFn: api.serviceNames });
   const { data: voNames } = useQuery({ queryKey: ["vo-names"], queryFn: api.voNames });
   const { data: tagNames } = useQuery({ queryKey: ["tag-names"], queryFn: api.tagNames });
-  const { data: knownContacts } = useQuery({ queryKey: ["contacts"], queryFn: api.contacts });
-  const { data: session } = useQuery({ queryKey: ["me"], queryFn: api.auth.me, retry: false });
-  const isAdmin = session?.effective_role === "administrator";
 
   const rgValid = placement.valid;
-  const hasContact = contacts.some((c) => c.name || c.id);
+  // A row counts once it's linked to a real person (a real id) or has a
+  // pending invite; a typed-but-never-picked name is neither, so it can't
+  // satisfy either check below -- matching what the backend enforces at
+  // apply time.
+  const contactsResolved = contacts.every((c) => (!c.name && !c.id) || !!c.id || !!c.invitePending);
+  const hasContact = contacts.some((c) => c.id || c.invitePending);
   const tagOptions = Array.from(new Set([...COMMON_TAGS, ...(tagNames ?? [])]));
+  const countsByType = contacts.reduce<Record<string, number>>((acc, c) => {
+    acc[c.type] = (acc[c.type] ?? 0) + 1;
+    return acc;
+  }, {});
 
   // Every field this form actually renders is always included below, even
   // when empty -- the backend now merges a submission onto the resource's
@@ -137,7 +147,7 @@ function NewResourceForm() {
     name: !name,
     rg: !rgValid,
     hostname: !hostname || badHostname,
-    contact: !hasContact,
+    contact: !hasContact || !contactsResolved,
   };
   const errCls = (bad: boolean) => (showErrors && bad ? " border-red-500 ring-1 ring-red-400" : "");
 
@@ -294,42 +304,53 @@ function NewResourceForm() {
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">Contacts</h3>
             <button
-              className="text-xs text-brand-600 hover:underline"
-              onClick={() => setContacts([...contacts, { type: "Administrative Contact", name: "", id: "" }])}
+              className="text-xs text-brand-600 hover:underline disabled:opacity-30"
+              disabled={CONTACT_TYPES.every((t) => (countsByType[t] ?? 0) >= MAX_PER_TYPE)}
+              onClick={() => {
+                const openType = CONTACT_TYPES.find((t) => (countsByType[t] ?? 0) < MAX_PER_TYPE) ?? CONTACT_TYPES[0];
+                setContacts([...contacts, { type: openType, name: "", id: "" }]);
+              }}
             >
               + Add contact
             </button>
           </div>
           {showErrors && invalid.contact && (
-            <p className="mb-2 text-xs text-red-600">At least one contact is required.</p>
+            <p className="mb-2 text-xs text-red-600">
+              {hasContact ? "Every contact must be linked to a person — search and select, or invite a new one." : "At least one contact is required."}
+            </p>
           )}
           <div className="space-y-2">
             {contacts.map((c, i) => (
-              <div key={i} className="flex items-start gap-2">
+              // Keying on index alone means a row that starts blank (the
+              // default rows, before the edit-mode prefill fetch resolves)
+              // keeps its already-mounted ContactPersonInput -- whose text
+              // state is seeded from props only once, on mount -- so it
+              // never picks up the prefilled name once editData arrives.
+              // Including id forces a remount exactly when a row's
+              // underlying identity actually changes (prefill or a fresh
+              // pick), not on every keystroke (id stays "" while typing).
+              <div key={`${i}-${c.id}`} className="flex items-start gap-2">
                 <div className="flex flex-col pt-2 text-gray-400">
                   <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === 0} onClick={() => moveContact(i, -1)} aria-label="Move up">▲</button>
                   <button type="button" className="leading-none hover:text-gray-700 disabled:opacity-30" disabled={i === contacts.length - 1} onClick={() => moveContact(i, 1)} aria-label="Move down">▼</button>
                 </div>
                 <div className="grid flex-1 grid-cols-2 gap-2">
                   <select className={input} value={c.type} onChange={(e) => setContact(i, { type: e.target.value })}>
-                    {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    {CONTACT_TYPES.map((t) => (
+                      <option key={t} value={t} disabled={t !== c.type && (countsByType[t] ?? 0) >= MAX_PER_TYPE}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
-                  <ContactPicker
-                    value={c}
-                    isAdmin={isAdmin}
-                    fallback={knownContacts ?? []}
-                    onChange={(patch) => setContact(i, patch)}
-                  />
+                  <ContactPicker value={c} onChange={(patch) => setContact(i, patch)} />
                 </div>
                 <button type="button" className="pt-2 text-gray-300 hover:text-red-600" onClick={() => removeContact(i)} aria-label="Remove contact">×</button>
               </div>
             ))}
           </div>
           <p className="mt-2 text-xs text-gray-400">
-            Order within a contact type sets its rank (Primary, Secondary, Tertiary) — use ▲▼ to reorder.
-            {isAdmin
-              ? " Type to search all users; selecting one fills the contact id."
-              : " Pick from known contacts, or ask an administrator / use an invite link for someone new."}
+            Order within a contact type sets its rank (Primary, Secondary, Tertiary; up to {MAX_PER_TYPE} per type) — use ▲▼ to reorder.
+            Type to search people; selecting one links the contact, or invite someone new.
           </p>
         </Card>
 
