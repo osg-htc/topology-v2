@@ -284,6 +284,29 @@ func TestApplyFacilityProposal_ContactMustResolveToRealUser(t *testing.T) {
 			t.Fatalf("applyFacilityProposal: expected a resolved contact to be accepted, got: %v", err)
 		}
 	})
+
+	// Regression guard: facility/site/resource_group contacts are a plain
+	// ordered list with rank *derived* from position (rankForOrder clamps
+	// anything past the 3rd to "Tertiary"), unlike a resource's ContactLists
+	// (map[type][rank]Contact, structurally immune). A 4th same-type contact
+	// must be rejected, not silently land on the same slot as the 3rd.
+	t.Run("a 4th contact of the same type is rejected", func(t *testing.T) {
+		contactID := emailSHA1("fourth-contact@example.org")
+		if _, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "Fourth Contact", Status: "active", LegacyContactID: contactID}); err != nil {
+			t.Fatalf("CreateUser (contact): %v", err)
+		}
+		contact := map[string]any{"contact_type": "Administrative Contact", "name": "Fourth Contact", "id": contactID}
+		p := &models.Proposal{
+			EntityKind: models.KindFacility, Operation: models.OpCreate,
+			ProposedState: marshal(map[string]any{
+				"name": "regtest-fac-fourth-contact", "institution_id": "https://example.org/iid/regtest",
+				"contacts": []map[string]any{contact, contact, contact, contact},
+			}),
+		}
+		if err := h.applyFacilityProposal(ctx, q, p, actorID); err == nil {
+			t.Fatalf("applyFacilityProposal: expected rejection for a 4th same-type contact, got success")
+		}
+	})
 }
 
 // TestApplyResourceProposal_ContactRankValidation covers

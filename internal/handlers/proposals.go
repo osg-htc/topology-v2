@@ -571,16 +571,37 @@ func sponsorTypeName(sponsor map[string]interface{}) (string, string) {
 	return "", ""
 }
 
+// validContactRanks bounds a contact list to the same three ranks the rest
+// of the app assumes everywhere (rankForOrder, RANKS in the frontend).
+var validContactRanks = map[string]bool{"Primary": true, "Secondary": true, "Tertiary": true}
+
 // requireResolvedContacts rejects any non-blank contact whose ID doesn't
-// resolve to a real, existing users row -- mirroring applyFacilityProposal's
-// InstitutionExists check: a contact must reference something real, verified
-// at apply time, not just accepted as free text. Skips fully-blank rows,
-// matching ReplaceEntityContacts' own skip rule, so an editor that never
-// touches a contact slot doesn't trip this on unrelated fields.
+// resolve to a real, existing user (see LegacyContactIDExists) -- mirroring
+// applyFacilityProposal's InstitutionExists check: a contact must reference
+// something real, verified at apply time, not just accepted as free text.
+// Skips fully-blank rows, matching ReplaceEntityContacts' own skip rule, so
+// an editor that never touches a contact slot doesn't trip this on unrelated
+// fields.
+//
+// Also bounds each contact type to len(validContactRanks) (3) entries.
+// Resources are structurally immune to this -- their ContactLists is
+// map[type][rank]Contact, so a 4th entry has nowhere to go -- but facility/
+// site/resource_group contacts are a plain ordered list with rank *derived*
+// from position (rankForOrder in queries_contacts.go clamps anything past
+// the 3rd to "Tertiary"), so nothing else stops a 4th same-type contact from
+// silently landing on the same (type, rank) as the 3rd: two live rows same
+// slot, no unique constraint to catch it, whichever a read returns first
+// "wins" for display. This is the guard the map shape gives resources for
+// free.
 func requireResolvedContacts(ctx context.Context, q *db.Queries, contacts []db.EntityContact) error {
+	perType := map[string]int{}
 	for _, c := range contacts {
 		if c.Name == "" && c.ID == "" {
 			continue
+		}
+		perType[c.ContactType]++
+		if perType[c.ContactType] > len(validContactRanks) {
+			return fmt.Errorf("%q has more than %d contacts — only Primary/Secondary/Tertiary are supported", c.ContactType, len(validContactRanks))
 		}
 		if ok, err := q.LegacyContactIDExists(ctx, c.ID); err != nil {
 			return err
@@ -590,12 +611,6 @@ func requireResolvedContacts(ctx context.Context, q *db.Queries, contacts []db.E
 	}
 	return nil
 }
-
-// validContactRanks bounds a resource's ContactLists to the same three ranks
-// the rest of the app assumes everywhere (rankForOrder, RANKS in the
-// frontend). The ordinary resource form can never produce anything else;
-// this exists to reject a crafted "advanced JSON" payload that tries to.
-var validContactRanks = map[string]bool{"Primary": true, "Secondary": true, "Tertiary": true}
 
 // requireResolvedResourceContacts is requireResolvedContacts for a
 // resource's ContactLists map shape (map[contact_type]map[rank]Contact),

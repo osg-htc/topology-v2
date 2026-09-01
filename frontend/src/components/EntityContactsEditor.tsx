@@ -15,6 +15,13 @@ export const CONTACT_TYPES = [
 // contact editor no longer shows these labels.
 export const RANKS = ["Primary", "Secondary", "Tertiary"];
 
+// Rank is derived from a row's order within its type (1st = Primary, …), by
+// position in the submitted list, not a stored field (see rankForOrder on the
+// backend). Capped at 3 rows per type: past the 3rd, the backend clamps
+// everything to "Tertiary", so a 4th same-type row would collide with the
+// 3rd -- two live rows claiming the same slot -- rather than erroring.
+const MAX_PER_TYPE = RANKS.length;
+
 export type ContactRow = {
   type: string;
   name: string;
@@ -75,6 +82,10 @@ export function EntityContactsEditor({
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
+  const countsByType = rows.reduce<Record<string, number>>((acc, c) => {
+    acc[c.type] = (acc[c.type] ?? 0) + 1;
+    return acc;
+  }, {});
   return (
     <Card>
       <h3 className="mb-3 text-sm font-semibold text-gray-700">Contacts</h3>
@@ -92,7 +103,11 @@ export function EntityContactsEditor({
             </div>
             <div className="grid flex-1 grid-cols-2 gap-2">
               <select className={input} value={c.type} onChange={(e) => set(i, { type: e.target.value })}>
-                {CONTACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {CONTACT_TYPES.map((t) => (
+                  <option key={t} value={t} disabled={t !== c.type && (countsByType[t] ?? 0) >= MAX_PER_TYPE}>
+                    {t}
+                  </option>
+                ))}
               </select>
               <ContactPicker value={c} onChange={(patch) => set(i, patch)} />
             </div>
@@ -102,8 +117,12 @@ export function EntityContactsEditor({
         {rows.length === 0 && <p className="text-sm text-gray-400">No contacts at this level.</p>}
       </div>
       <button
-        className="mt-2 text-xs text-brand-600 hover:underline"
-        onClick={() => onChange([...rows, { type: "Administrative Contact", name: "", id: "" }])}
+        className="mt-2 text-xs text-brand-600 hover:underline disabled:opacity-30"
+        disabled={CONTACT_TYPES.every((t) => (countsByType[t] ?? 0) >= MAX_PER_TYPE)}
+        onClick={() => {
+          const openType = CONTACT_TYPES.find((t) => (countsByType[t] ?? 0) < MAX_PER_TYPE) ?? CONTACT_TYPES[0];
+          onChange([...rows, { type: openType, name: "", id: "" }]);
+        }}
       >
         + Add contact
       </button>
