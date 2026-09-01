@@ -81,7 +81,6 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 		r.Get("/service-names", h.ServiceNamesHandler)
 		r.Get("/vo-names", h.VONamesHandler)
 		r.Get("/tag-names", h.TagsHandler)
-		r.Get("/contacts", h.ContactsHandler)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {

@@ -354,34 +354,6 @@ func (q *Queries) ListDistinctTags(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// ContactOption is a distinct known contact (person) for pick-lists.
-type ContactOption struct {
-	Name string `json:"name"`
-	ID   string `json:"id"`
-}
-
-// ListDistinctContacts returns distinct known contacts from resource_contacts.
-func (q *Queries) ListDistinctContacts(ctx context.Context) ([]ContactOption, error) {
-	rows, err := q.pool.Query(ctx,
-		`SELECT DISTINCT COALESCE(contact_name,''), COALESCE(contact_id,'')
-		 FROM resource_contacts
-		 WHERE deleted_at IS NULL AND (contact_name <> '' OR contact_id <> '')
-		 ORDER BY 1`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]ContactOption, 0)
-	for rows.Next() {
-		var c ContactOption
-		if err := rows.Scan(&c.Name, &c.ID); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
 // ResourceRGID returns the active resource group id for a resource name.
 func (q *Queries) ResourceRGID(ctx context.Context, resourceName string) (string, error) {
 	var id string

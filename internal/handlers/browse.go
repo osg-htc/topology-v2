@@ -12,7 +12,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/bbockelm/topology-v2/internal/db"
-	"github.com/bbockelm/topology-v2/internal/models"
 )
 
 // includeInactive reports whether ?include_inactive is truthy.
@@ -124,31 +123,12 @@ func (h *Handler) TagsHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, tags)
 }
 
-// ContactsHandler returns distinct known contacts (for the contact picker).
-// Contact ids are PII: only a contact_reader (or manager/admin) sees them;
-// everyone else gets names only.
-func (h *Handler) ContactsHandler(w http.ResponseWriter, r *http.Request) {
-	contacts, err := h.queries.ListDistinctContacts(r.Context())
-	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if !models.HasContactReader(rolesFromContext(r.Context())) {
-		for i := range contacts {
-			contacts[i].ID = ""
-		}
-	}
-	respondJSON(w, http.StatusOK, contacts)
-}
-
 // SearchContactableUsersHandler is a non-admin-safe real-user search, so any
 // authenticated user (not just admins) can find and pick a real person as a
-// contact -- unlike ContactsHandler above, which only ever surfaces names
-// already used somewhere in resource_contacts, not real users table rows.
-// Returns legacy_contact_id as "id" -- the one identifier a contact has (see
-// EntityContact's doc comment in internal/db/queries_contacts.go), not the
-// users.id surrogate key. A user with none yet (no email ever captured) is
-// excluded -- there's nothing valid to pick them by.
+// contact. Returns legacy_contact_id as "id" -- the one identifier a contact
+// has (see EntityContact's doc comment in internal/db/queries_contacts.go),
+// not the users.id surrogate key. A user with none yet (no email ever
+// captured) is excluded -- there's nothing valid to pick them by.
 func (h *Handler) SearchContactableUsersHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	users, err := h.queries.SearchUsers(r.Context(), q, 25)
