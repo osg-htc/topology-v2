@@ -1,16 +1,17 @@
 # OSG Topology Webapp
 
-A Go + Postgres + S3 rewrite of the OSG topology registry, replacing the
+A Go + Postgres rewrite of the OSG topology registry, replacing the
 hand-edited YAML + GitHub-PR workflow with a resource-centric webapp: federated
 login and identity linking, a propose-then-approve change workflow, encrypted
-contact PII, and backup/restore that round-trips the existing topology GitHub
-repo.
+contact PII, and a restore action that round-trips the existing topology
+GitHub repo. Postgres backups are handled at the infrastructure layer, not by
+this app.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the full architecture.
 
 ## Quickest start — one command (Docker)
 
-Bring up Postgres + MinIO + the app (frontend embedded) with a single command:
+Bring up Postgres + the app (frontend embedded) with a single command:
 
 ```bash
 make up            # == docker compose up --build
@@ -20,19 +21,17 @@ Then open **http://localhost:8080**. It starts in development mode, so use the
 **Dev login** box on the login page (pick a role, e.g. `administrator`) — no
 OIDC setup needed.
 
-To load real data once you're in: go to **Admin → Backup & restore → Import from
+To load real data once you're in: go to **Admin → Restore → Import from
 GitHub** (pulls `opensciencegrid/topology`). Or, from a checkout of the topology
 repo, run the importer directly (see below).
 
-Other endpoints while it's up: MinIO console at http://localhost:9101
-(minioadmin / minioadmin). Stop with `make down` (keeps data) or `make
-down-clean` (wipes volumes).
+Stop with `make down` (keeps data) or `make down-clean` (wipes volumes).
 
 Host ports are deliberately non-default to avoid clashing with other local
-stacks: app **:8080**, Postgres **:55432**, MinIO API **:9100**, console
-**:9101** (the app reaches Postgres/MinIO over the internal Docker network, so
-those mappings are only for optional external access). If :8080 is taken, add a
-`docker-compose.override.yml` remapping the `app` port.
+stacks: app **:8080**, Postgres **:55432** (the app reaches Postgres over the
+internal Docker network, so this mapping is only for optional external
+access). If :8080 is taken, add a `docker-compose.override.yml` remapping the
+`app` port.
 
 ### Play with the API directly
 
@@ -89,10 +88,9 @@ All config comes from `TOPOLOGY_*` environment variables (see
 | --- | --- |
 | `TOPOLOGY_DATABASE_URL` | Postgres connection string (required) |
 | `TOPOLOGY_INSTANCE_KEY` | 32-byte hex master key (auto-generated if unset) |
-| `TOPOLOGY_S3_*` | S3/MinIO endpoint, bucket, credentials (backups) |
 | `TOPOLOGY_OIDC_*` | OIDC issuer / client id / secret (CILogon by default) |
 | `TOPOLOGY_INSTITUTIONS_API` | External institutions registry (cached in DB) |
-| `TOPOLOGY_GITHUB_*` | topology repo + token for backup/restore |
+| `TOPOLOGY_GITHUB_*` | topology repo + token for the restore-from-GitHub import |
 
 ## Build
 

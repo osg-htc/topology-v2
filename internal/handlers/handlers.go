@@ -13,7 +13,6 @@ import (
 	"github.com/bbockelm/topology-v2/internal/config"
 	"github.com/bbockelm/topology-v2/internal/crypto"
 	"github.com/bbockelm/topology-v2/internal/db"
-	"github.com/bbockelm/topology-v2/internal/storage"
 	"github.com/bbockelm/topology-v2/internal/version"
 )
 
@@ -21,14 +20,13 @@ import (
 type Handler struct {
 	cfg           *config.Config
 	queries       *db.Queries
-	store         *storage.Store // may be nil in dev if S3 is unconfigured
 	encryptor     *crypto.Encryptor
 	sessionSecret []byte
 }
 
 // New constructs a Handler, deriving the encryptor and session secret from the
 // instance master key.
-func New(cfg *config.Config, queries *db.Queries, store *storage.Store) (*Handler, error) {
+func New(cfg *config.Config, queries *db.Queries) (*Handler, error) {
 	enc, err := crypto.NewEncryptor(cfg.MasterKey())
 	if err != nil {
 		return nil, err
@@ -40,7 +38,6 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store) (*Handle
 	return &Handler{
 		cfg:           cfg,
 		queries:       queries,
-		store:         store,
 		encryptor:     enc,
 		sessionSecret: secret,
 	}, nil

@@ -20,7 +20,6 @@ import (
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/githistory"
 	"github.com/bbockelm/topology-v2/internal/router"
-	"github.com/bbockelm/topology-v2/internal/storage"
 	"github.com/bbockelm/topology-v2/internal/topology"
 	"github.com/bbockelm/topology-v2/internal/version"
 )
@@ -220,25 +219,7 @@ func run() error {
 
 	queries := db.New(pool)
 
-	// S3 is optional in development; a nil store is tolerated by handlers that
-	// don't require it.
-	var store *storage.Store
-	if cfg.S3Bucket != "" {
-		store, err = storage.New(ctx, storage.Options{
-			Endpoint:     cfg.S3Endpoint,
-			Region:       cfg.S3Region,
-			Bucket:       cfg.S3Bucket,
-			AccessKey:    cfg.S3AccessKey,
-			SecretKey:    cfg.S3SecretKey,
-			UsePathStyle: cfg.S3UsePathStyle,
-		})
-		if err != nil {
-			return err
-		}
-		logger.Info().Str("bucket", cfg.S3Bucket).Msg("object storage ready")
-	}
-
-	r, _, err := router.New(cfg, queries, store, logger)
+	r, _, err := router.New(cfg, queries, logger)
 	if err != nil {
 		return err
 	}

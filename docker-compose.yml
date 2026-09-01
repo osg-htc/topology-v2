@@ -1,5 +1,5 @@
-# One-command local stack: Postgres + MinIO + the topology webapp (built from
-# the Dockerfile with the frontend embedded). Everything the app needs.
+# One-command local stack: Postgres + the topology webapp (built from the
+# Dockerfile with the frontend embedded). Everything the app needs.
 #
 #   docker compose up --build
 #   open http://localhost:8080   (dev mode: use the "Dev login" box)
@@ -29,20 +29,6 @@ services:
       timeout: 3s
       retries: 20
 
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9100:9000" # S3 API (host 9100 to avoid clashes)
-      - "9101:9001" # MinIO console -> http://localhost:9101
-    volumes:
-      - miniodata:/data
-    # No healthcheck / init container: the app creates the backups bucket itself
-    # on boot (storage.ensureBucket), so there is nothing to race against.
-
   app:
     build:
       context: .
@@ -54,16 +40,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
     environment:
       TOPOLOGY_APP_ENV: development
       TOPOLOGY_DATABASE_URL: postgres://topology:topology@postgres:5432/topology?sslmode=disable
-      TOPOLOGY_S3_ENDPOINT: http://minio:9000
-      TOPOLOGY_S3_BUCKET: topology-backups
-      TOPOLOGY_S3_ACCESS_KEY: minioadmin
-      TOPOLOGY_S3_SECRET_KEY: minioadmin
-      TOPOLOGY_S3_USE_PATH_STYLE: "true"
       TOPOLOGY_BASE_URL: http://localhost:8080
       # Fixed 32-byte (64 hex) key so encrypted data survives restarts. DEV ONLY.
       TOPOLOGY_INSTANCE_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
@@ -72,4 +51,3 @@ services:
 
 volumes:
   pgdata:
-  miniodata:

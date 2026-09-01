@@ -17,12 +17,11 @@ import (
 	"github.com/bbockelm/topology-v2/internal/frontend"
 	"github.com/bbockelm/topology-v2/internal/handlers"
 	"github.com/bbockelm/topology-v2/internal/models"
-	"github.com/bbockelm/topology-v2/internal/storage"
 )
 
 // New builds the top-level router and returns it along with the Handler.
-func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger zerolog.Logger) (*chi.Mux, *handlers.Handler, error) {
-	h, err := handlers.New(cfg, queries, store)
+func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.Mux, *handlers.Handler, error) {
+	h, err := handlers.New(cfg, queries)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -155,12 +154,9 @@ func New(cfg *config.Config, queries *db.Queries, store *storage.Store, logger z
 			r.With(h.RequireRole(models.RoleManager, models.RoleAdministrator)).
 				Get("/audit", h.ListAuditHandler)
 
-			// Administrator-only backup/restore, settings, and user management.
+			// Administrator-only restore, settings, and user management.
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(h.RequireRole(models.RoleAdministrator))
-				r.Post("/backup", h.CreateBackup)
-				r.Get("/backups", h.ListBackups)
-				r.Post("/restore", h.RestoreBackup)
 				r.Post("/import-github", h.ImportFromGitHub)
 				r.Post("/institutions/sync", h.SyncInstitutionsHandler)
 				r.Get("/oidc-config", h.GetOIDCConfig)

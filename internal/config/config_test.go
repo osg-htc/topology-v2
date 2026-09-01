@@ -16,8 +16,6 @@ func clearTopologyEnv(t *testing.T) {
 	for _, v := range []string{
 		"TOPOLOGY_APP_ENV", "TOPOLOGY_PORT", "TOPOLOGY_BASE_URL", "TOPOLOGY_DATABASE_URL",
 		"TOPOLOGY_INSTANCE_KEY", "TOPOLOGY_MASTER_KEY_PATH",
-		"TOPOLOGY_S3_ENDPOINT", "TOPOLOGY_S3_REGION", "TOPOLOGY_S3_BUCKET",
-		"TOPOLOGY_S3_ACCESS_KEY", "TOPOLOGY_S3_SECRET_KEY", "TOPOLOGY_S3_USE_PATH_STYLE",
 		"TOPOLOGY_OIDC_ISSUER", "TOPOLOGY_OIDC_CLIENT_ID", "TOPOLOGY_OIDC_CLIENT_SECRET",
 		"TOPOLOGY_INSTITUTIONS_API", "TOPOLOGY_GITHUB_REPO", "TOPOLOGY_GITHUB_TOKEN",
 	} {
@@ -37,7 +35,6 @@ func TestLoad_Defaults(t *testing.T) {
 		"Port":            {c.Port, "8080"},
 		"BaseURL":         {c.BaseURL, "http://localhost:8080"},
 		"MasterKeyPath":   {c.MasterKeyPath, ".topology-master.key"},
-		"S3Region":        {c.S3Region, "us-east-1"},
 		"OIDCIssuer":      {c.OIDCIssuer, "https://cilogon.org"},
 		"InstitutionsAPI": {c.InstitutionsAPI, "https://topology-institutions.osg-htc.org/api"},
 		"GitHubRepo":      {c.GitHubRepo, "opensciencegrid/topology"},
@@ -46,9 +43,6 @@ func TestLoad_Defaults(t *testing.T) {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want default %q", field, c.got, c.want)
 		}
-	}
-	if !c.S3UsePathStyle {
-		t.Error("S3UsePathStyle default = false, want true")
 	}
 }
 
@@ -72,8 +66,8 @@ func TestLoad_OverridesFromEnv(t *testing.T) {
 		t.Errorf("DatabaseURL = %q", c.DatabaseURL)
 	}
 	// A var that wasn't overridden must still fall back to its default.
-	if c.S3Region != "us-east-1" {
-		t.Errorf("S3Region = %q, want the untouched default us-east-1", c.S3Region)
+	if c.OIDCIssuer != "https://cilogon.org" {
+		t.Errorf("OIDCIssuer = %q, want the untouched default https://cilogon.org", c.OIDCIssuer)
 	}
 }
 
@@ -106,21 +100,18 @@ func TestValidateServer(t *testing.T) {
 		}
 	})
 
-	t.Run("development mode doesn't require S3/OIDC", func(t *testing.T) {
+	t.Run("development mode doesn't require OIDC", func(t *testing.T) {
 		c := &Config{AppEnv: "development", DatabaseURL: "postgres://x"}
 		if err := c.ValidateServer(); err != nil {
 			t.Errorf("got %v, want no error", err)
 		}
 	})
 
-	t.Run("production mode requires S3 bucket and OIDC client id", func(t *testing.T) {
+	t.Run("production mode requires an OIDC client id", func(t *testing.T) {
 		c := &Config{AppEnv: "production", DatabaseURL: "postgres://x"}
 		err := c.ValidateServer()
 		if err == nil {
 			t.Fatal("got no error, want one naming the missing production requirements")
-		}
-		if !strings.Contains(err.Error(), "S3_BUCKET") {
-			t.Errorf("error %q doesn't mention S3_BUCKET", err)
 		}
 		if !strings.Contains(err.Error(), "OIDC_CLIENT_ID") {
 			t.Errorf("error %q doesn't mention OIDC_CLIENT_ID", err)
@@ -130,7 +121,7 @@ func TestValidateServer(t *testing.T) {
 	t.Run("production mode with everything set passes", func(t *testing.T) {
 		c := &Config{
 			AppEnv: "production", DatabaseURL: "postgres://x",
-			S3Bucket: "my-bucket", OIDCClientID: "my-client-id",
+			OIDCClientID: "my-client-id",
 		}
 		if err := c.ValidateServer(); err != nil {
 			t.Errorf("got %v, want no error", err)
