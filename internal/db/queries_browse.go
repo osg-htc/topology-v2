@@ -394,6 +394,19 @@ func (q *Queries) ResourceRGID(ctx context.Context, resourceName string) (string
 	return id, nil
 }
 
+// GetDowntimeResourceName returns the resource a downtime targets, by its
+// dt_id -- used to resolve who may decide an update/delete proposal for an
+// existing downtime (see IsResourceContact in queries_contacts.go).
+func (q *Queries) GetDowntimeResourceName(ctx context.Context, dtID int64) (string, error) {
+	var name string
+	err := q.pool.QueryRow(ctx,
+		`SELECT resource_name FROM downtimes WHERE dt_id=$1 AND deleted_at IS NULL`, dtID).Scan(&name)
+	if err != nil {
+		return "", ErrNotFound
+	}
+	return name, nil
+}
+
 // UpdateDowntimeByID updates a downtime in place (identified by its dt_id).
 func (q *Queries) UpdateDowntimeByID(ctx context.Context, dtID int64, class, severity, description, start, end string, services []string) error {
 	_, err := q.pool.Exec(ctx,

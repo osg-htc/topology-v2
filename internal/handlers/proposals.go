@@ -28,6 +28,51 @@ func (h *Handler) isManagerOrAdmin(r *http.Request) bool {
 	return role == models.RoleManager || role == models.RoleAdministrator
 }
 
+// canDecideProposal reports whether the current request's user may approve
+// or reject this proposal. Managers/administrators may always decide
+// anything. A downtime proposal additionally allows anyone already listed as
+// a contact -- any type, any rank, on the resource itself or inherited from
+// its resource group/site/facility -- on the downtime's target resource,
+// mirroring v1's automerge_check.py: a downtime change auto-merges for
+// whoever the affected resource's own contact lists already vouch for,
+// without needing a manager to sign off on every routine outage.
+func (h *Handler) canDecideProposal(ctx context.Context, r *http.Request, p *models.Proposal) bool {
+	if h.isManagerOrAdmin(r) {
+		return true
+	}
+	if p.EntityKind != models.KindDowntime {
+		return false
+	}
+	resourceName := h.downtimeProposalResource(ctx, p)
+	if resourceName == "" {
+		return false
+	}
+	ok, err := h.queries.IsResourceContact(ctx, h.currentUser(r).ID, resourceName)
+	return err == nil && ok
+}
+
+// downtimeProposalResource resolves the resource a downtime proposal
+// targets: from the proposed state for a create, or from the existing row
+// (looked up by dt_id) for an update/delete.
+func (h *Handler) downtimeProposalResource(ctx context.Context, p *models.Proposal) string {
+	if p.Operation == models.OpCreate {
+		var dp downtimeProposal
+		if json.Unmarshal(p.ProposedState, &dp) != nil {
+			return ""
+		}
+		return dp.Resource
+	}
+	dtID, err := strconv.ParseInt(p.TargetName, 10, 64)
+	if err != nil {
+		return ""
+	}
+	name, err := h.queries.GetDowntimeResourceName(ctx, dtID)
+	if err != nil {
+		return ""
+	}
+	return name
+}
+
 type createProposalRequest struct {
 	EntityKind    string          `json:"entity_kind"`
 	Operation     string          `json:"operation"`
@@ -177,7 +222,7 @@ func (h *Handler) WithdrawProposal(w http.ResponseWriter, r *http.Request) {
 	h.transition(w, r, models.ProposalWithdrawn, false, "proposal.withdraw")
 }
 
-// RejectProposal rejects a pending proposal (manager/admin only).
+// RejectProposal rejects a pending proposal (see canDecideProposal for who).
 func (h *Handler) RejectProposal(w http.ResponseWriter, r *http.Request) {
 	h.transition(w, r, models.ProposalRejected, true, "proposal.reject")
 }
@@ -193,7 +238,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request, target stri
 	}
 	u := h.currentUser(r)
 	if requireReviewer {
-		if !h.isManagerOrAdmin(r) {
+		if !h.canDecideProposal(ctx, r, p) {
 			respondError(w, http.StatusForbidden, "requires manager or administrator")
 			return
 		}
@@ -221,17 +266,18 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request, target stri
 	respondJSON(w, http.StatusOK, map[string]string{"status": target})
 }
 
-// ApproveProposal applies an approved proposal to the live tables (manager/admin).
+// ApproveProposal applies an approved proposal to the live tables (see
+// canDecideProposal for who may do this).
 func (h *Handler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
-	if !h.isManagerOrAdmin(r) {
-		respondError(w, http.StatusForbidden, "requires manager or administrator")
-		return
-	}
 	p, err := h.queries.GetProposal(ctx, id)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+	if !h.canDecideProposal(ctx, r, p) {
+		respondError(w, http.StatusForbidden, "requires manager or administrator")
 		return
 	}
 	if p.Status != models.ProposalPending {
@@ -283,6 +329,7 @@ func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
 			p.BaseStale = cur == nil || !cur.Equal(*p.BaseUpdatedAt)
 		}
 	}
+	p.CanDecide = p.Status == models.ProposalPending && h.canDecideProposal(ctx, r, p)
 	respondJSON(w, http.StatusOK, p)
 }
 
@@ -314,18 +361,35 @@ func (h *Handler) ListMyProposals(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, ps)
 }
 
-// ListPendingProposals lists all pending proposals (reviewer queue).
+// ListPendingProposals lists proposals awaiting this user's decision. A
+// manager/administrator sees the full reviewer queue. Anyone else sees only
+// the pending downtime proposals they may decide as a contact of the
+// affected resource (see canDecideProposal) -- their own, smaller queue,
+// rather than a 403: v1 grants that same authority without a manager queue
+// in the loop at all.
 func (h *Handler) ListPendingProposals(w http.ResponseWriter, r *http.Request) {
-	if !h.isManagerOrAdmin(r) {
-		respondError(w, http.StatusForbidden, "requires manager or administrator")
+	ctx := r.Context()
+	if h.isManagerOrAdmin(r) {
+		ps, err := h.queries.ListPendingProposals(ctx)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "loading proposals")
+			return
+		}
+		respondJSON(w, http.StatusOK, ps)
 		return
 	}
-	ps, err := h.queries.ListPendingProposals(r.Context())
+	dts, err := h.queries.ListPendingDowntimeProposals(ctx)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "loading proposals")
 		return
 	}
-	respondJSON(w, http.StatusOK, ps)
+	out := make([]*models.Proposal, 0, len(dts))
+	for _, p := range dts {
+		if h.canDecideProposal(ctx, r, p) {
+			out = append(out, p)
+		}
+	}
+	respondJSON(w, http.StatusOK, out)
 }
 
 // ListAuditHandler returns recent audit-log entries (manager/admin only).

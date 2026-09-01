@@ -82,6 +82,10 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   revisions?: ProposalRevision[];
+  // Whether the CURRENT viewer may approve/reject this proposal -- not just
+  // a manager/admin check: a downtime's target resource may have its own
+  // contacts who can decide it too (see canDecideProposal on the backend).
+  can_decide: boolean;
 }
 
 export interface ProposalRevision {

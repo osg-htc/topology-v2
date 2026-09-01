@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
@@ -13,6 +15,15 @@ import (
 	"github.com/bbockelm/topology-v2/internal/testsupport"
 	"github.com/bbockelm/topology-v2/internal/topology"
 )
+
+// asUser builds a request carrying the same context values RequireAuth
+// installs, for testing handler methods that read currentUser/rolesFromContext
+// without going through the real HTTP/middleware stack.
+func asUser(userID string, roles ...string) *http.Request {
+	ctx := context.WithValue(context.Background(), ctxUser, &models.User{ID: userID})
+	ctx = context.WithValue(ctx, ctxRoles, roles)
+	return httptest.NewRequest(http.MethodPost, "/", nil).WithContext(ctx)
+}
 
 // TestApplyResourceProposal_RenameUpdatesInPlace guards the fix for the
 // original reported bug: editing a resource's name via a proposal must update
@@ -478,4 +489,134 @@ func TestApplyBundleProposal_ResourceGroupAndResourceInOneBundle(t *testing.T) {
 	if found.RGName != "regtest-bundle-rg" {
 		t.Fatalf("resource's resource group = %q, want the bundle's own new group %q", found.RGName, "regtest-bundle-rg")
 	}
+}
+
+// TestCanDecideProposal_DowntimeContactCarveOut guards the v1-parity fix:
+// automerge_check.py grants a downtime change the same authority as being
+// one of the affected resource's own contacts, no manager needed. Covers the
+// resource's own contacts, inherited resource_group contacts, an unrelated
+// user getting no carve-out, an update/delete proposal resolving its
+// resource by dt_id rather than proposed_state, and non-downtime kinds never
+// getting the carve-out at all.
+func TestCanDecideProposal_DowntimeContactCarveOut(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	facID, err := q.InsertFacility(ctx, db.FacilityRow{TopologyID: 900000080, Name: "regtest-dt-facility", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertFacility: %v", err)
+	}
+	siteID, err := q.InsertSite(ctx, db.SiteRow{TopologyID: 900000081, FacilityID: facID, Name: "regtest-dt-site", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertSite: %v", err)
+	}
+	rgID, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{GroupID: 900000082, SiteID: siteID, Name: "regtest-dt-rg", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertResourceGroup: %v", err)
+	}
+
+	const ownContactResource = "regtest-dt-resource-own"
+	const inheritedContactResource = "regtest-dt-resource-inherited"
+	if err := q.InsertResource(ctx, db.ResourceRow{
+		TopologyID: 900000083, ResourceGroupID: rgID, Name: ownContactResource, FQDN: "regtest-dt-own.example.org", IDExplicit: true,
+	}); err != nil {
+		t.Fatalf("InsertResource (own): %v", err)
+	}
+	if err := q.InsertResource(ctx, db.ResourceRow{
+		TopologyID: 900000084, ResourceGroupID: rgID, Name: inheritedContactResource, FQDN: "regtest-dt-inherited.example.org", IDExplicit: true,
+	}); err != nil {
+		t.Fatalf("InsertResource (inherited): %v", err)
+	}
+
+	ownContactID := emailSHA1("own-contact@example.org")
+	ownContactUserID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "Own Contact", Status: "active", LegacyContactID: ownContactID})
+	if err != nil {
+		t.Fatalf("CreateUser (own contact): %v", err)
+	}
+	if err := q.InsertResourceContact(ctx, db.ResourceContactRow{
+		ResourceID: 900000083, ContactType: "Administrative Contact", Rank: "Primary",
+		ContactName: "Own Contact", ContactID: ownContactID,
+	}); err != nil {
+		t.Fatalf("InsertResourceContact: %v", err)
+	}
+
+	rgContactID := emailSHA1("rg-contact@example.org")
+	rgContactUserID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "RG Contact", Status: "active", LegacyContactID: rgContactID})
+	if err != nil {
+		t.Fatalf("CreateUser (rg contact): %v", err)
+	}
+	if err := q.ReplaceEntityContacts(ctx, models.KindResourceGroup, "regtest-dt-rg", "regtest-dt-rg",
+		[]db.EntityContact{{ContactType: "Administrative Contact", Name: "RG Contact", ID: rgContactID}}, ""); err != nil {
+		t.Fatalf("ReplaceEntityContacts: %v", err)
+	}
+
+	otherUserID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "Unrelated User", Status: "active"})
+	if err != nil {
+		t.Fatalf("CreateUser (unrelated): %v", err)
+	}
+
+	marshalDowntime := func(resource string) json.RawMessage {
+		b, err := json.Marshal(map[string]any{"resource": resource, "class": "SCHEDULED", "start_time": "", "end_time": ""})
+		if err != nil {
+			t.Fatalf("marshal fixture: %v", err)
+		}
+		return b
+	}
+
+	t.Run("the resource's own contact may decide", func(t *testing.T) {
+		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: marshalDowntime(ownContactResource)}
+		if !h.canDecideProposal(ctx, asUser(ownContactUserID, models.RoleUser), p) {
+			t.Fatalf("expected the resource's own contact to be able to decide this downtime")
+		}
+	})
+
+	t.Run("a contact inherited from the resource group may decide", func(t *testing.T) {
+		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: marshalDowntime(inheritedContactResource)}
+		if !h.canDecideProposal(ctx, asUser(rgContactUserID, models.RoleUser), p) {
+			t.Fatalf("expected a resource-group-inherited contact to be able to decide this downtime")
+		}
+	})
+
+	t.Run("an unrelated user may not decide", func(t *testing.T) {
+		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: marshalDowntime(ownContactResource)}
+		if h.canDecideProposal(ctx, asUser(otherUserID, models.RoleUser), p) {
+			t.Fatalf("expected an unrelated user to be rejected")
+		}
+	})
+
+	t.Run("an update proposal resolves its resource by dt_id, not proposed_state", func(t *testing.T) {
+		const dtID int64 = 900000085
+		if err := q.InsertDowntime(ctx, db.DowntimeRow{
+			DtID: dtID, RGID: rgID, ResourceName: ownContactResource, Class: "SCHEDULED",
+			StartTime: "x", EndTime: "y", CreatedTime: "z",
+		}); err != nil {
+			t.Fatalf("InsertDowntime: %v", err)
+		}
+		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpUpdate, TargetName: strconv.FormatInt(dtID, 10)}
+		if !h.canDecideProposal(ctx, asUser(ownContactUserID, models.RoleUser), p) {
+			t.Fatalf("expected the resource's own contact to decide an update proposal resolved via dt_id")
+		}
+		if h.canDecideProposal(ctx, asUser(otherUserID, models.RoleUser), p) {
+			t.Fatalf("expected an unrelated user to be rejected for the same update proposal")
+		}
+	})
+
+	t.Run("non-downtime kinds never get the carve-out", func(t *testing.T) {
+		p := &models.Proposal{EntityKind: models.KindFacility, Operation: models.OpUpdate, TargetName: "regtest-dt-facility"}
+		if h.canDecideProposal(ctx, asUser(ownContactUserID, models.RoleUser), p) {
+			t.Fatalf("expected a resource contact to get no carve-out on a non-downtime proposal")
+		}
+	})
+
+	t.Run("a manager may always decide, contact or not", func(t *testing.T) {
+		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: marshalDowntime(ownContactResource)}
+		if !h.canDecideProposal(ctx, asUser(otherUserID, models.RoleManager), p) {
+			t.Fatalf("expected a manager to be able to decide any downtime")
+		}
+	})
 }

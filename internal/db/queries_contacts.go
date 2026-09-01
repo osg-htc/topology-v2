@@ -93,3 +93,37 @@ func (q *Queries) ListEntityContacts(ctx context.Context, kind, name string) ([]
 	}
 	return out, rows.Err()
 }
+
+// IsResourceContact reports whether userID is linked to any contact slot
+// (any type, any rank) on the named resource -- its own resource_contacts,
+// or inherited from its resource group / site / facility's entity_contacts.
+// This is the authorization v1's automerge_check.py grants: a downtime
+// change only needs to be decided by a manager if none of the resource's own
+// contacts, at any level, already vouch for it (see canDecideProposal in
+// internal/handlers/proposals.go) -- there is no separate approvers list,
+// the resource's contact lists already are the allowlist.
+func (q *Queries) IsResourceContact(ctx context.Context, userID, resourceName string) (bool, error) {
+	if userID == "" || resourceName == "" {
+		return false, nil
+	}
+	var ok bool
+	err := q.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM resource_contacts rc
+			JOIN resources r ON r.topology_id = rc.resource_id
+			WHERE r.name = $1 AND r.deleted_at IS NULL
+			  AND rc.deleted_at IS NULL AND rc.user_id = $2
+		) OR EXISTS (
+			SELECT 1 FROM resources r
+			JOIN resource_groups rg ON rg.id = r.resource_group_id
+			JOIN sites s ON s.id = rg.site_id
+			JOIN facilities f ON f.id = s.facility_id
+			JOIN entity_contacts ec ON ec.deleted_at IS NULL AND ec.user_id = $2 AND (
+				(ec.entity_kind = 'resource_group' AND ec.entity_name = rg.name) OR
+				(ec.entity_kind = 'site' AND ec.entity_name = s.name) OR
+				(ec.entity_kind = 'facility' AND ec.entity_name = f.name)
+			)
+			WHERE r.name = $1 AND r.deleted_at IS NULL
+		)`, resourceName, userID).Scan(&ok)
+	return ok, err
+}

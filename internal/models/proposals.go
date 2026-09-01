@@ -56,6 +56,12 @@ type Proposal struct {
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        time.Time          `json:"updated_at"`
 	Revisions        []ProposalRevision `json:"revisions,omitempty"`
+	// CanDecide is computed per-request in GetProposal (see canDecideProposal)
+	// -- whether the CURRENT viewer may approve/reject this proposal. Not
+	// just "is a manager/admin": a downtime proposal's target resource may
+	// have its own contacts who can decide it too. The frontend's Actions
+	// card renders off this rather than re-deriving the rule client-side.
+	CanDecide bool `json:"can_decide"`
 }
 
 // ProposalRevision is one entry in a proposal's append-only edit history.

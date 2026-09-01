@@ -172,6 +172,15 @@ func (q *Queries) ListPendingProposals(ctx context.Context) ([]*models.Proposal,
 		`SELECT `+proposalCols+` FROM change_proposals WHERE status = 'pending' ORDER BY updated_at ASC`)
 }
 
+// ListPendingDowntimeProposals returns all pending downtime proposals, for a
+// non-manager caller's queue -- filtered down in Go (see canDecideProposal in
+// internal/handlers/proposals.go) to the ones a resource contact may decide.
+func (q *Queries) ListPendingDowntimeProposals(ctx context.Context) ([]*models.Proposal, error) {
+	return q.listProposals(ctx,
+		`SELECT `+proposalCols+` FROM change_proposals
+		 WHERE status = 'pending' AND entity_kind = $1 ORDER BY updated_at ASC`, models.KindDowntime)
+}
+
 // ListProposalsByEntity returns an entity's actual edit history: proposals
 // that are pending or have taken effect. Drafts, rejected, and withdrawn
 // proposals are excluded -- a draft may be another user's private

@@ -64,8 +64,6 @@ function ProposalView() {
 
   if (isLoading || !p) return <div className="p-8 text-gray-400">Loading…</div>;
 
-  const role = session?.effective_role;
-  const isReviewer = role === "manager" || role === "administrator";
   const isCreator = session?.user.id === p.created_by;
   const editable = p.status === "draft" || p.status === "pending";
   // Route "edit in form" to the matching structured create/edit form.
@@ -77,7 +75,7 @@ function ProposalView() {
   // way the Actions card must say something, not render empty.
   const canSubmit = isCreator && p.status === "draft";
   const canWithdraw = isCreator && (p.status === "draft" || p.status === "pending");
-  const canReview = isReviewer && p.status === "pending";
+  const canReview = p.can_decide;
   const hasActions = canSubmit || canWithdraw || canReview;
   const decided = p.status !== "draft" && p.status !== "pending";
 
