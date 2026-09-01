@@ -120,7 +120,7 @@ export const api = {
     me: () => fetchJSON<SessionInfo>("/auth/me"),
     mode: () => fetchJSON<{ mode: string }>("/auth/mode"),
     logout: () => fetchJSON<{ status: string }>("/auth/logout", { method: "POST" }),
-    devLogin: (body: { email?: string; display_name?: string; role?: string }) =>
+    devLogin: (body: { email?: string; display_name?: string; role?: string; invite?: string }) =>
       fetchJSON<{ status: string; user_id: string }>("/auth/dev-login", {
         method: "POST",
         body: JSON.stringify(body),
