@@ -80,7 +80,6 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 		r.Get("/service-names", h.ServiceNamesHandler)
 		r.Get("/vo-names", h.VONamesHandler)
 		r.Get("/tag-names", h.TagsHandler)
-		r.Get("/contacts", h.ContactsHandler)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {
@@ -115,6 +114,7 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 			r.Use(h.RequireAuth)
 			r.Get("/dashboard", h.DashboardHandler)
 			r.Get("/user-labels", h.UserLabelsHandler)
+			r.Get("/users/search", h.SearchContactableUsersHandler)
 
 			r.Route("/proposals", func(r chi.Router) {
 				r.Post("/", h.CreateProposal)

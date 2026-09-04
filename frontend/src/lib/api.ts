@@ -82,6 +82,10 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   revisions?: ProposalRevision[];
+  // Whether the CURRENT viewer may approve/reject this proposal -- not just
+  // a manager/admin check: a downtime's target resource may have its own
+  // contacts who can decide it too (see canDecideProposal on the backend).
+  can_decide: boolean;
 }
 
 export interface ProposalRevision {
@@ -116,7 +120,7 @@ export const api = {
     me: () => fetchJSON<SessionInfo>("/auth/me"),
     mode: () => fetchJSON<{ mode: string }>("/auth/mode"),
     logout: () => fetchJSON<{ status: string }>("/auth/logout", { method: "POST" }),
-    devLogin: (body: { email?: string; display_name?: string; role?: string }) =>
+    devLogin: (body: { email?: string; display_name?: string; role?: string; invite?: string }) =>
       fetchJSON<{ status: string; user_id: string }>("/auth/dev-login", {
         method: "POST",
         body: JSON.stringify(body),
@@ -135,7 +139,6 @@ export const api = {
   serviceNames: () => fetchJSON<string[]>("/service-names"),
   voNames: () => fetchJSON<string[]>("/vo-names"),
   tagNames: () => fetchJSON<string[]>("/tag-names"),
-  contacts: () => fetchJSON<{ name: string; id: string }[]>("/contacts"),
   resourceGroups: (includeInactive = false) =>
     fetchJSON<ResourceGroup[]>(`/resource-groups${includeInactive ? "?include_inactive=1" : ""}`),
   sites: (includeInactive = false) =>
@@ -194,11 +197,16 @@ export const api = {
     accept: (token: string) =>
       fetchJSON<{ status: string }>(`/invites/${token}/accept`, { method: "POST" }),
     create: (body: unknown) =>
-      fetchJSON<{ invite_url: string; token: string }>("/invites", {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+      fetchJSON<{ invite_url: string; token: string; invite_id: string; contact_id?: string; name?: string }>(
+        "/invites",
+        { method: "POST", body: JSON.stringify(body) },
+      ),
   },
+  // usersSearch is the non-admin-safe real-user search, used by the contact
+  // picker for any authenticated user (admins additionally have
+  // admin.searchUsers, which returns legacy_contact_id too).
+  usersSearch: (q: string) =>
+    fetchJSON<ContactableUser[]>(`/users/search?q=${encodeURIComponent(q)}`),
   contactReplacements: {
     create: (body: {
       entity_kind: string;
@@ -491,4 +499,15 @@ export interface InvitePreview {
     contact_type: string;
     rank: string;
   } | null;
+  contact_email?: string;
+}
+
+// ContactableUser is the non-admin-safe search result shape from
+// /users/search. id is the user's legacy_contact_id (the one identifier a
+// contact has, not the users.id surrogate key) -- unlike UserSearchResult
+// (the admin picker), which also exposes legacy_contact_id and is_provisioned
+// separately, this collapses to just the one field a contact needs.
+export interface ContactableUser {
+  id: string;
+  display_name: string;
 }

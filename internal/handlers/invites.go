@@ -57,12 +57,21 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		// Any authenticated user may onboard a brand-new contact: provision a
 		// user now (no linked identity) and target the invite at it. When the
 		// invitee signs in through the link, their identity attaches to it.
+		// Email is required (not just stored) -- it's how this person gets
+		// the one contact id everything else uses, minted the same way v1
+		// does (SHA1 of the lowercased email, see emailSHA1): there's no
+		// path to being a valid, pickable contact without it.
 		if req.DisplayName == "" {
 			respondError(w, http.StatusBadRequest, "display_name required")
 			return
 		}
+		if req.Email == "" {
+			respondError(w, http.StatusBadRequest, "email required")
+			return
+		}
 		uid, err := h.queries.CreateUser(ctx, db.CreateUserParams{
 			DisplayName: req.DisplayName, Status: "active", IsProvisioned: true,
+			LegacyContactID: emailSHA1(req.Email),
 		})
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "provisioning contact")
@@ -79,7 +88,7 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	inviteID, err := h.queries.CreateInvite(ctx, db.CreateInviteParams{
 		Kind: req.Kind, TokenHash: hashToken(token), CreatedBy: u.ID,
 		TargetUserID: req.TargetUserID, ClaimJSON: claimJSON,
-		ExpiresAt: time.Now().Add(inviteExpiry),
+		ExpiresAt: time.Now().Add(inviteExpiry), ContactEmail: req.Email,
 	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "creating invite")
@@ -98,7 +107,10 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		"invite_id":  inviteID,
 	}
 	if onboardedUserID != "" {
-		resp["user_id"] = onboardedUserID
+		// contact_id, not user_id -- the picker links contacts by the one id
+		// everything checks (see EntityContact's doc comment), the same
+		// SHA1-of-email value just minted above for this new user.
+		resp["contact_id"] = emailSHA1(req.Email)
 		resp["name"] = onboardedName
 	}
 	respondJSON(w, http.StatusCreated, resp)

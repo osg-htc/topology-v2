@@ -32,7 +32,12 @@ test("inline parent creation submits an atomic bundle", async ({ page }) => {
   await page.getByRole("button", { name: instName }).first().click();
 
   await page.getByPlaceholder("host.example.org").fill(`${resName.toLowerCase().replace(/_/g, "-")}.example.org`);
-  await page.getByPlaceholder("Search people…").first().fill("E2E Admin");
+  // Contacts must be a real, picked person -- typing alone never resolves
+  // to one. "Dev User" matches the signed-in dev-login account itself
+  // (its display name when no explicit one is set); which real match gets
+  // clicked doesn't matter, only that it's a real one.
+  await page.getByPlaceholder("Search people…").first().fill("Dev User");
+  await page.getByRole("button", { name: "Dev User" }).first().click();
 
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page).toHaveURL(/\/proposals\/view/);

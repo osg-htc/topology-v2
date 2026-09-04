@@ -16,6 +16,10 @@ const nav = [
   { href: "/replacements", label: "Contact hand-offs" },
 ];
 
+// Not manager/admin-gated: a contact of a resource can decide pending
+// downtime proposals for it (see canDecideProposal on the backend), so
+// everyone gets this link -- the page itself just renders whatever the API
+// returns, empty state included, same as My requests/Contact hand-offs.
 const reviewerNav = [{ href: "/proposals/review", label: "Review queue" }];
 const adminNav = [
   { href: "/admin/users", label: "Users" },
@@ -28,7 +32,6 @@ const adminNav = [
 export function Sidebar({ session }: { session: SessionInfo }) {
   const pathname = usePathname();
   const role = session.effective_role;
-  const isReviewer = role === "manager" || role === "administrator";
   const isAdmin = role === "administrator";
 
   const link = (href: string, label: string) => {
@@ -51,14 +54,10 @@ export function Sidebar({ session }: { session: SessionInfo }) {
       <div className="px-4 py-5 text-lg font-semibold">OSG Topology</div>
       <nav className="flex-1 space-y-1 px-2">
         {nav.map((n) => link(n.href, n.label))}
-        {isReviewer && (
-          <>
-            <div className="px-3 pt-4 text-xs uppercase tracking-wide text-navy-100/60">
-              Review
-            </div>
-            {reviewerNav.map((n) => link(n.href, n.label))}
-          </>
-        )}
+        <div className="px-3 pt-4 text-xs uppercase tracking-wide text-navy-100/60">
+          Review
+        </div>
+        {reviewerNav.map((n) => link(n.href, n.label))}
         {isAdmin && (
           <>
             <div className="px-3 pt-4 text-xs uppercase tracking-wide text-navy-100/60">

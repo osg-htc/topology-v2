@@ -28,6 +28,51 @@ func (h *Handler) isManagerOrAdmin(r *http.Request) bool {
 	return role == models.RoleManager || role == models.RoleAdministrator
 }
 
+// canDecideProposal reports whether the current request's user may approve
+// or reject this proposal. Managers/administrators may always decide
+// anything. A downtime proposal additionally allows anyone already listed as
+// a contact -- any type, any rank, on the resource itself or inherited from
+// its resource group/site/facility -- on the downtime's target resource,
+// mirroring v1's automerge_check.py: a downtime change auto-merges for
+// whoever the affected resource's own contact lists already vouch for,
+// without needing a manager to sign off on every routine outage.
+func (h *Handler) canDecideProposal(ctx context.Context, r *http.Request, p *models.Proposal) bool {
+	if h.isManagerOrAdmin(r) {
+		return true
+	}
+	if p.EntityKind != models.KindDowntime {
+		return false
+	}
+	resourceName := h.downtimeProposalResource(ctx, p)
+	if resourceName == "" {
+		return false
+	}
+	ok, err := h.queries.IsResourceContact(ctx, h.currentUser(r).ID, resourceName)
+	return err == nil && ok
+}
+
+// downtimeProposalResource resolves the resource a downtime proposal
+// targets: from the proposed state for a create, or from the existing row
+// (looked up by dt_id) for an update/delete.
+func (h *Handler) downtimeProposalResource(ctx context.Context, p *models.Proposal) string {
+	if p.Operation == models.OpCreate {
+		var dp downtimeProposal
+		if json.Unmarshal(p.ProposedState, &dp) != nil {
+			return ""
+		}
+		return dp.Resource
+	}
+	dtID, err := strconv.ParseInt(p.TargetName, 10, 64)
+	if err != nil {
+		return ""
+	}
+	name, err := h.queries.GetDowntimeResourceName(ctx, dtID)
+	if err != nil {
+		return ""
+	}
+	return name
+}
+
 type createProposalRequest struct {
 	EntityKind    string          `json:"entity_kind"`
 	Operation     string          `json:"operation"`
@@ -177,7 +222,7 @@ func (h *Handler) WithdrawProposal(w http.ResponseWriter, r *http.Request) {
 	h.transition(w, r, models.ProposalWithdrawn, false, "proposal.withdraw")
 }
 
-// RejectProposal rejects a pending proposal (manager/admin only).
+// RejectProposal rejects a pending proposal (see canDecideProposal for who).
 func (h *Handler) RejectProposal(w http.ResponseWriter, r *http.Request) {
 	h.transition(w, r, models.ProposalRejected, true, "proposal.reject")
 }
@@ -193,7 +238,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request, target stri
 	}
 	u := h.currentUser(r)
 	if requireReviewer {
-		if !h.isManagerOrAdmin(r) {
+		if !h.canDecideProposal(ctx, r, p) {
 			respondError(w, http.StatusForbidden, "requires manager or administrator")
 			return
 		}
@@ -221,17 +266,18 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request, target stri
 	respondJSON(w, http.StatusOK, map[string]string{"status": target})
 }
 
-// ApproveProposal applies an approved proposal to the live tables (manager/admin).
+// ApproveProposal applies an approved proposal to the live tables (see
+// canDecideProposal for who may do this).
 func (h *Handler) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
-	if !h.isManagerOrAdmin(r) {
-		respondError(w, http.StatusForbidden, "requires manager or administrator")
-		return
-	}
 	p, err := h.queries.GetProposal(ctx, id)
 	if err != nil {
 		respondError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+	if !h.canDecideProposal(ctx, r, p) {
+		respondError(w, http.StatusForbidden, "requires manager or administrator")
 		return
 	}
 	if p.Status != models.ProposalPending {
@@ -283,6 +329,7 @@ func (h *Handler) GetProposal(w http.ResponseWriter, r *http.Request) {
 			p.BaseStale = cur == nil || !cur.Equal(*p.BaseUpdatedAt)
 		}
 	}
+	p.CanDecide = p.Status == models.ProposalPending && h.canDecideProposal(ctx, r, p)
 	respondJSON(w, http.StatusOK, p)
 }
 
@@ -314,18 +361,35 @@ func (h *Handler) ListMyProposals(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, ps)
 }
 
-// ListPendingProposals lists all pending proposals (reviewer queue).
+// ListPendingProposals lists proposals awaiting this user's decision. A
+// manager/administrator sees the full reviewer queue. Anyone else sees only
+// the pending downtime proposals they may decide as a contact of the
+// affected resource (see canDecideProposal) -- their own, smaller queue,
+// rather than a 403: v1 grants that same authority without a manager queue
+// in the loop at all.
 func (h *Handler) ListPendingProposals(w http.ResponseWriter, r *http.Request) {
-	if !h.isManagerOrAdmin(r) {
-		respondError(w, http.StatusForbidden, "requires manager or administrator")
+	ctx := r.Context()
+	if h.isManagerOrAdmin(r) {
+		ps, err := h.queries.ListPendingProposals(ctx)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "loading proposals")
+			return
+		}
+		respondJSON(w, http.StatusOK, ps)
 		return
 	}
-	ps, err := h.queries.ListPendingProposals(r.Context())
+	dts, err := h.queries.ListPendingDowntimeProposals(ctx)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "loading proposals")
 		return
 	}
-	respondJSON(w, http.StatusOK, ps)
+	out := make([]*models.Proposal, 0, len(dts))
+	for _, p := range dts {
+		if h.canDecideProposal(ctx, r, p) {
+			out = append(out, p)
+		}
+	}
+	respondJSON(w, http.StatusOK, out)
 }
 
 // ListAuditHandler returns recent audit-log entries (manager/admin only).
@@ -571,6 +635,69 @@ func sponsorTypeName(sponsor map[string]interface{}) (string, string) {
 	return "", ""
 }
 
+// validContactRanks bounds a contact list to the same three ranks the rest
+// of the app assumes everywhere (rankForOrder, RANKS in the frontend).
+var validContactRanks = map[string]bool{"Primary": true, "Secondary": true, "Tertiary": true}
+
+// requireResolvedContacts rejects any non-blank contact whose ID doesn't
+// resolve to a real, existing user (see LegacyContactIDExists) -- mirroring
+// applyFacilityProposal's InstitutionExists check: a contact must reference
+// something real, verified at apply time, not just accepted as free text.
+// Skips fully-blank rows, matching ReplaceEntityContacts' own skip rule, so
+// an editor that never touches a contact slot doesn't trip this on unrelated
+// fields.
+//
+// Also bounds each contact type to len(validContactRanks) (3) entries.
+// Resources are structurally immune to this -- their ContactLists is
+// map[type][rank]Contact, so a 4th entry has nowhere to go -- but facility/
+// site/resource_group contacts are a plain ordered list with rank *derived*
+// from position (rankForOrder in queries_contacts.go clamps anything past
+// the 3rd to "Tertiary"), so nothing else stops a 4th same-type contact from
+// silently landing on the same (type, rank) as the 3rd: two live rows same
+// slot, no unique constraint to catch it, whichever a read returns first
+// "wins" for display. This is the guard the map shape gives resources for
+// free.
+func requireResolvedContacts(ctx context.Context, q *db.Queries, contacts []db.EntityContact) error {
+	perType := map[string]int{}
+	for _, c := range contacts {
+		if c.Name == "" && c.ID == "" {
+			continue
+		}
+		perType[c.ContactType]++
+		if perType[c.ContactType] > len(validContactRanks) {
+			return fmt.Errorf("%q has more than %d contacts — only Primary/Secondary/Tertiary are supported", c.ContactType, len(validContactRanks))
+		}
+		if ok, err := q.LegacyContactIDExists(ctx, c.ID); err != nil {
+			return err
+		} else if !ok {
+			return fmt.Errorf("contact %q is not linked to a known person — pick an existing one or invite a new one", c.Name)
+		}
+	}
+	return nil
+}
+
+// requireResolvedResourceContacts is requireResolvedContacts for a
+// resource's ContactLists map shape (map[contact_type]map[rank]Contact),
+// with an added rank-key check -- see validContactRanks.
+func requireResolvedResourceContacts(ctx context.Context, q *db.Queries, lists map[string]map[string]topology.Contact) error {
+	for ctype, ranks := range lists {
+		for rank, c := range ranks {
+			if !validContactRanks[rank] {
+				return fmt.Errorf("contact rank %q for %q is not valid — must be Primary, Secondary, or Tertiary", rank, ctype)
+			}
+			if c.Name == "" && c.ID == "" {
+				continue
+			}
+			if ok, err := q.LegacyContactIDExists(ctx, c.ID); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("contact %q is not linked to a known person — pick an existing one or invite a new one", c.Name)
+			}
+		}
+	}
+	return nil
+}
+
 type rgProposal struct {
 	Name             string             `json:"name"`
 	Site             string             `json:"site"`
@@ -586,6 +713,9 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 	}
 	var rp rgProposal
 	if err := json.Unmarshal(p.ProposedState, &rp); err != nil {
+		return err
+	}
+	if err := requireResolvedContacts(ctx, q, rp.Contacts); err != nil {
 		return err
 	}
 	siteID, err := q.SiteIDByName(ctx, rp.Site)
@@ -643,6 +773,9 @@ func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *model
 	if err := json.Unmarshal(p.ProposedState, &sp); err != nil {
 		return err
 	}
+	if err := requireResolvedContacts(ctx, q, sp.Contacts); err != nil {
+		return err
+	}
 	facID, err := q.FacilityIDByName(ctx, sp.Facility)
 	if err != nil {
 		return errors.New("facility not found: " + sp.Facility)
@@ -696,6 +829,9 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 	} else if !ok {
 		return fmt.Errorf("institution %q is not in the registry — register it first", fp.InstitutionID)
 	}
+	if err := requireResolvedContacts(ctx, q, fp.Contacts); err != nil {
+		return err
+	}
 	if p.Operation == models.OpUpdate {
 		if err := q.UpdateFacilityFields(ctx, p.TargetName, fp.Name, fp.InstitutionID); err != nil {
 			return err
@@ -745,6 +881,9 @@ func (h *Handler) applyResourceProposal(ctx context.Context, q *db.Queries, p *m
 	}
 	if rp.Name == "" || rp.ResourceGroup == "" {
 		return errBadProposalState
+	}
+	if err := requireResolvedResourceContacts(ctx, q, rp.Resource.ContactLists); err != nil {
+		return err
 	}
 	rgID, err := q.ResourceGroupIDByName(ctx, rp.ResourceGroup)
 	if err != nil {

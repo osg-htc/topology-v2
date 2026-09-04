@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/bbockelm/topology-v2/internal/models"
 )
@@ -205,6 +206,64 @@ func (q *Queries) BackfillContactUsers(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return int(tag.RowsAffected()), nil
+}
+
+// BackfillEntityContactUsers is BackfillContactUsers' twin for
+// entity_contacts (resource_group/site/facility contacts) -- kind-agnostic,
+// since the table is already shared across all three.
+func (q *Queries) BackfillEntityContactUsers(ctx context.Context) (int, error) {
+	if _, err := q.pool.Exec(ctx,
+		`INSERT INTO users (display_name, status, is_provisioned, legacy_contact_id)
+		 SELECT DISTINCT ON (contact_id) COALESCE(contact_name,''), 'active', TRUE, contact_id
+		 FROM entity_contacts
+		 WHERE COALESCE(contact_id,'') <> ''
+		   AND NOT EXISTS (SELECT 1 FROM users u WHERE u.legacy_contact_id = entity_contacts.contact_id)
+		 ORDER BY contact_id, contact_name
+		 ON CONFLICT (legacy_contact_id) WHERE legacy_contact_id IS NOT NULL DO NOTHING`); err != nil {
+		return 0, err
+	}
+	tag, err := q.pool.Exec(ctx,
+		`UPDATE entity_contacts ec SET user_id = u.id
+		 FROM users u
+		 WHERE u.legacy_contact_id = ec.contact_id
+		   AND ec.user_id IS NULL AND COALESCE(ec.contact_id,'') <> ''`)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// UserExists reports whether id refers to a real users row. Casts the
+// column to text before comparing so a garbage, non-UUID id (e.g. from a
+// crafted request) reports false instead of raising a raw Postgres type
+// error -- the same class of bug already hit once this session (the
+// bundle-approve UUID crash) when an untrusted string reached a uuid column
+// directly.
+// LegacyContactIDExists reports whether id matches a real user's
+// legacy_contact_id -- the one identifier a contact has (see EntityContact's
+// doc comment in queries_contacts.go). This is the sole check
+// requireResolvedContacts/requireResolvedResourceContacts rely on.
+func (q *Queries) LegacyContactIDExists(ctx context.Context, id string) (bool, error) {
+	var ok bool
+	err := q.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM users WHERE legacy_contact_id = $1)`, id).Scan(&ok)
+	return ok, err
+}
+
+// SetLegacyContactIDIfMissing mints this user's canonical contact id (the v1
+// SHA1-of-email scheme, via emailSHA1) the moment we learn their email --
+// login or invite-onboarding -- if they don't already have one. A unique
+// violation (another user somehow already claims this id) is swallowed
+// rather than erroring the caller's login/onboarding flow over it.
+func (q *Queries) SetLegacyContactIDIfMissing(ctx context.Context, userID, legacyID string) error {
+	_, err := q.pool.Exec(ctx,
+		`UPDATE users SET legacy_contact_id = $2 WHERE id = $1 AND legacy_contact_id IS NULL`,
+		userID, legacyID)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return nil
+	}
+	return err
 }
 
 // SearchUsers finds users by display name or legacy contact id (admin picker).
@@ -501,16 +560,20 @@ type CreateInviteParams struct {
 	TargetUserID string
 	ClaimJSON    []byte // marshaled RoleClaim, or nil
 	ExpiresAt    time.Time
+	// ContactEmail is the email typed while onboarding a brand-new contact
+	// (contact_onboard invites only) -- stored so it's not silently
+	// discarded; this app has no mailer, so nothing sends to it.
+	ContactEmail string
 }
 
 // CreateInvite inserts an invite and returns its id.
 func (q *Queries) CreateInvite(ctx context.Context, p CreateInviteParams) (string, error) {
 	var id string
 	err := q.pool.QueryRow(ctx,
-		`INSERT INTO invites (kind, token_hash, created_by, target_user_id, claim, expires_at)
-		 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+		`INSERT INTO invites (kind, token_hash, created_by, target_user_id, claim, expires_at, contact_email)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
 		p.Kind, p.TokenHash, nullString(p.CreatedBy), nullString(p.TargetUserID),
-		nullBytes(p.ClaimJSON), p.ExpiresAt).Scan(&id)
+		nullBytes(p.ClaimJSON), p.ExpiresAt, nullString(p.ContactEmail)).Scan(&id)
 	return id, err
 }
 
@@ -524,16 +587,17 @@ type InviteRow struct {
 	UsedAt       *time.Time
 	ExpiresAt    time.Time
 	CreatedAt    time.Time
+	ContactEmail string
 }
 
 // GetInviteByTokenHash fetches an invite by its token hash.
 func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash []byte) (*InviteRow, error) {
 	r := &InviteRow{}
-	var createdBy, target *string
+	var createdBy, target, contactEmail *string
 	err := q.pool.QueryRow(ctx,
-		`SELECT id, kind, created_by, target_user_id, claim, used_at, expires_at, created_at
+		`SELECT id, kind, created_by, target_user_id, claim, used_at, expires_at, created_at, contact_email
 		 FROM invites WHERE token_hash = $1`, tokenHash).
-		Scan(&r.ID, &r.Kind, &createdBy, &target, &r.ClaimJSON, &r.UsedAt, &r.ExpiresAt, &r.CreatedAt)
+		Scan(&r.ID, &r.Kind, &createdBy, &target, &r.ClaimJSON, &r.UsedAt, &r.ExpiresAt, &r.CreatedAt, &contactEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -542,6 +606,7 @@ func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash []byte) (*
 	}
 	r.CreatedBy = deref(createdBy)
 	r.TargetUserID = deref(target)
+	r.ContactEmail = deref(contactEmail)
 	return r, nil
 }
 

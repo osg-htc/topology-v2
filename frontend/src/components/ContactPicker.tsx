@@ -5,7 +5,11 @@ import { api } from "@/lib/api";
 import { input } from "./ui";
 import { ContactPersonInput } from "./ContactPersonInput";
 
-// The subset of a contact row this control manages.
+// The subset of a contact row this control manages. id is the one
+// identifier a contact has -- the same v1 scheme (SHA1 of a lowercased
+// email, or an OSG-prefixed CILogon id). Required (via a real pick or a
+// fresh invite) before a row is submittable -- see EntityContactsEditor/the
+// resource form's validity checks.
 export type ContactValue = {
   name: string;
   id: string;
@@ -14,19 +18,15 @@ export type ContactValue = {
   inviteUrl?: string;
 };
 
-// ContactPicker selects a contact person WITHOUT exposing external ids: either
-// pick an existing user (search), or onboard a brand-new person via an invite
-// link. When invited, the row is marked pending — the change can't be committed
-// until the invite is accepted.
+// ContactPicker selects a contact person: either pick an existing real user
+// (search), or onboard a brand-new person via an invite link. When invited,
+// the row is marked pending — the change can't be committed until the
+// invite is accepted (see CountUnacceptedProposalInvites on the backend).
 export function ContactPicker({
   value,
-  isAdmin,
-  fallback,
   onChange,
 }: {
   value: ContactValue;
-  isAdmin: boolean;
-  fallback: { name: string; id: string }[];
   onChange: (patch: Partial<ContactValue>) => void;
 }) {
   const [mode, setMode] = useState<"pick" | "invite">("pick");
@@ -69,16 +69,26 @@ export function ContactPicker({
       setErr("Name is required.");
       return;
     }
+    if (!inviteEmail.trim()) {
+      setErr("Email is required — it's how this person gets a contact id.");
+      return;
+    }
     setBusy(true);
     try {
-      const res = (await api.invites.create({
+      const res = await api.invites.create({
         kind: "contact_onboard",
         display_name: inviteName.trim(),
-        email: inviteEmail.trim() || undefined,
-      })) as unknown as { invite_url: string; invite_id: string; name?: string };
+        email: inviteEmail.trim(),
+      });
+      // The invite already mints this person's contact id synchronously
+      // (res.contact_id, the same SHA1-of-email scheme v1 uses) -- link it
+      // now rather than leaving id empty until acceptance; approval still
+      // waits on the invite being accepted (CountUnacceptedProposalInvites),
+      // this just avoids the row looking unresolved to apply-time
+      // validation once that does happen.
       onChange({
         name: res.name ?? inviteName.trim(),
-        id: "",
+        id: res.contact_id ?? "",
         inviteId: res.invite_id,
         invitePending: true,
         inviteUrl: res.invite_url,
@@ -95,7 +105,7 @@ export function ContactPicker({
       <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
         <div className="grid grid-cols-2 gap-2">
           <input className={input} value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Full name" />
-          <input className={input} type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email (optional)" />
+          <input className={input} type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email" />
         </div>
         {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
         <div className="mt-2 flex gap-3 text-xs">
@@ -112,13 +122,7 @@ export function ContactPicker({
 
   return (
     <div>
-      <ContactPersonInput
-        name={value.name}
-        id={value.id}
-        isAdmin={isAdmin}
-        fallback={fallback}
-        onChange={(nm, cid) => onChange({ name: nm, id: cid })}
-      />
+      <ContactPersonInput name={value.name} id={value.id} onChange={(nm, cid) => onChange({ name: nm, id: cid })} />
       <button type="button" className="mt-1 text-xs text-brand-600 hover:underline" onClick={() => setMode("invite")}>
         …or invite someone new
       </button>

@@ -199,8 +199,14 @@ func (h *Handler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// 1) Existing identity → log in.
+	// 1) Existing identity → log in. Also mint a legacy contact id if this
+	// identity predates that requirement (see linkIdentity) -- someone who
+	// already had an account before contact verification shipped must still
+	// become pickable as a contact on their very next login, not never.
 	if existing, err := h.queries.FindIdentity(ctx, issuer, subject); err == nil {
+		if existing.EmailSHA1 != "" {
+			_ = h.queries.SetLegacyContactIDIfMissing(ctx, existing.UserID, existing.EmailSHA1)
+		}
 		h.loginUser(ctx, w, existing.UserID)
 		h.finishRedirect(w, r, returnTo, invite)
 		return
@@ -264,6 +270,20 @@ func (h *Handler) onboardIdentity(ctx context.Context, w http.ResponseWriter, r 
 		}
 	}
 
+	// Match a provisioned contact by email hash -- the same v1 contact-id
+	// scheme (SHA1 of the lowercased email, see emailSHA1) -- so someone
+	// vivified as a contact via legacy import/invite before ever logging in
+	// is recognized as the same person on their first real login, not
+	// duplicated into a second account.
+	if p.Email != "" {
+		if u, err := h.queries.FindUserByLegacyContactID(ctx, emailSHA1(p.Email)); err == nil {
+			if err := h.linkIdentity(ctx, u.ID, p); err != nil {
+				return "", err
+			}
+			return u.ID, nil
+		}
+	}
+
 	// role_claim invite → create a fresh account, then link. The claim itself is
 	// accepted in a separate authenticated step (AcceptInvite).
 	if inv != nil && inv.Kind == models.InviteRoleClaim {
@@ -282,7 +302,11 @@ func (h *Handler) onboardIdentity(ctx context.Context, w http.ResponseWriter, r 
 }
 
 // linkIdentity encrypts the email and inserts a user_identities row, translating
-// a unique-violation into a friendly "already linked" error.
+// a unique-violation into a friendly "already linked" error. Also mints this
+// user's canonical contact id (SHA1 of their email, the v1 scheme -- see
+// emailSHA1) if they don't already have one, so anyone who's ever logged in
+// can immediately be found and picked as a real contact by that one id, the
+// same as v1 -- not just people who arrived via legacy import or invite.
 func (h *Handler) linkIdentity(ctx context.Context, userID string, p onboardParams) error {
 	params := db.CreateIdentityParams{
 		UserID: userID, Issuer: p.Issuer, Subject: p.Subject,
@@ -302,6 +326,9 @@ func (h *Handler) linkIdentity(ctx context.Context, userID string, p onboardPara
 			return errors.New("identity_already_linked")
 		}
 		return errors.New("link_failed")
+	}
+	if p.Email != "" {
+		_ = h.queries.SetLegacyContactIDIfMissing(ctx, userID, emailSHA1(p.Email))
 	}
 	return nil
 }
@@ -456,6 +483,9 @@ func (h *Handler) DevLogin(w http.ResponseWriter, r *http.Request) {
 	var userID string
 	if existing, err := h.queries.FindIdentity(ctx, issuer, subject); err == nil {
 		userID = existing.UserID
+		if existing.EmailSHA1 != "" {
+			_ = h.queries.SetLegacyContactIDIfMissing(ctx, userID, existing.EmailSHA1)
+		}
 	} else {
 		p := onboardParams{Issuer: issuer, Subject: subject, Email: req.Email, Name: req.DisplayName, InviteToken: req.Invite}
 		// Honor an onboarding/account-link invite so contact onboarding works
@@ -560,10 +590,11 @@ func (h *Handler) GetInvite(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(inv.ClaimJSON, claim)
 	}
 	respondJSON(w, http.StatusOK, map[string]any{
-		"kind":       inv.Kind,
-		"valid":      valid,
-		"expires_at": inv.ExpiresAt,
-		"claim":      claim,
+		"kind":          inv.Kind,
+		"valid":         valid,
+		"expires_at":    inv.ExpiresAt,
+		"claim":         claim,
+		"contact_email": inv.ContactEmail,
 	})
 }
 

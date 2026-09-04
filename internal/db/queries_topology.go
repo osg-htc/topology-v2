@@ -284,9 +284,13 @@ func (q *Queries) InsertResourceService(ctx context.Context, r ResourceServiceRo
 	return err
 }
 
+// InsertResourceContact uses r.UserID directly when present (the ordinary,
+// validated proposal path always supplies one -- see requireResolvedContacts
+// in internal/handlers/proposals.go); falls back to bootstrapping a
+// provisioned user from the legacy ContactName/ContactID pair only when
+// UserID is empty, which today only happens via the bulk YAML import/restore
+// path (internal/topology.Import), not ordinary proposals.
 func (q *Queries) InsertResourceContact(ctx context.Context, r ResourceContactRow) error {
-	// Contacts must be users: bootstrap a provisioned (identity-less) user for
-	// this contact and link it.
 	userID, _ := q.UpsertProvisionedContactUser(ctx, r.ContactName, r.ContactID)
 	_, err := q.pool.Exec(ctx,
 		`INSERT INTO resource_contacts (resource_id, contact_type, rank, contact_name, contact_id, user_id)
