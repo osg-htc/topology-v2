@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { PageHeader, Card, btn, input, label } from "@/components/ui";
 
 export default function AdminSettingsPage() {
@@ -40,11 +40,16 @@ export default function AdminSettingsPage() {
   });
 
   if (error) {
+    // Only a real 403 means "you're not an admin" -- any other failure must
+    // show its own message, not blame the viewer's role.
+    const forbidden = error instanceof ApiError && error.status === 403;
     return (
       <div className="p-8">
         <PageHeader title="Settings" />
         <Card>
-          <p className="text-sm text-red-600">Administrator role required.</p>
+          <p className="text-sm text-red-600">
+            {forbidden ? "Administrator role required." : String(error)}
+          </p>
         </Card>
       </div>
     );

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { PageHeader, Card, btn, btnSecondary, input } from "@/components/ui";
 
 export default function AdminBackupPage() {
@@ -32,11 +32,17 @@ export default function AdminBackupPage() {
   });
 
   if (error) {
+    // Only a real 403 means "you're not an admin" -- anything else (e.g. a
+    // 503 when S3 isn't configured on this deployment) must show its own
+    // message, not blame the viewer's role for an unrelated server issue.
+    const forbidden = error instanceof ApiError && error.status === 403;
     return (
       <div className="p-8">
         <PageHeader title="Backup & restore" />
         <Card>
-          <p className="text-sm text-red-600">Administrator role required.</p>
+          <p className="text-sm text-red-600">
+            {forbidden ? "Administrator role required." : String(error)}
+          </p>
         </Card>
       </div>
     );

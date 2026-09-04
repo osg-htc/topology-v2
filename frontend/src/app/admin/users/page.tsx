@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, AdminUser } from "@/lib/api";
+import { api, AdminUser, ApiError } from "@/lib/api";
 import { PageHeader, Card } from "@/components/ui";
 
 const ROLES = ["administrator", "manager", "user", "contact_reader"];
@@ -26,11 +26,16 @@ export default function AdminUsersPage() {
   });
 
   if (error) {
+    // Only a real 403 means "you're not an admin" -- any other failure must
+    // show its own message, not blame the viewer's role.
+    const forbidden = error instanceof ApiError && error.status === 403;
     return (
       <div className="p-8">
         <PageHeader title="Users" />
         <Card>
-          <p className="text-sm text-red-600">Administrator role required.</p>
+          <p className="text-sm text-red-600">
+            {forbidden ? "Administrator role required." : String(error)}
+          </p>
         </Card>
       </div>
     );
