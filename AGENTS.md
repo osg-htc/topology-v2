@@ -12,11 +12,11 @@ for how to run it.
 - `internal/db` — pgx pool, hand-written `Queries` (no ORM), goose migrations
   (`internal/db/migrations/*.sql`, embedded + auto-run at boot).
 - `internal/topology` — YAML data model + reader/writer + importer/exporter
-  (the GitHub backup/restore round-trip).
+  (the GitHub restore round-trip).
 - `internal/xmlapi` — legacy web API output (rgsummary/rgdowntime XML + XSDs).
 - `internal/proposalschema` — versioned JSON Schemas + upgraders for change
   proposals (see below).
-- `internal/handlers`, `internal/router`, `internal/models`, `internal/storage`.
+- `internal/handlers`, `internal/router`, `internal/models`.
 - `frontend/` — Next.js + Tailwind SPA (static-exported and embedded in prod).
 
 ## Conventions

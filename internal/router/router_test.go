@@ -25,11 +25,11 @@ func testConfig(t *testing.T) *config.Config {
 }
 
 // TestNew_BuildsWithoutADatabase confirms router.New itself never touches
-// queries/store at construction time (handlers.New only derives keys from
-// the master key) -- wiring the route tree must not require a live
-// database connection just to build.
+// queries at construction time (handlers.New only derives keys from the
+// master key) -- wiring the route tree must not require a live database
+// connection just to build.
 func TestNew_BuildsWithoutADatabase(t *testing.T) {
-	r, h, err := New(testConfig(t), nil, nil, zerolog.Nop())
+	r, h, err := New(testConfig(t), nil, zerolog.Nop())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestNew_BuildsWithoutADatabase(t *testing.T) {
 }
 
 func TestHealthz_Unauthenticated(t *testing.T) {
-	r, _, err := New(testConfig(t), nil, nil, zerolog.Nop())
+	r, _, err := New(testConfig(t), nil, zerolog.Nop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestHealthz_Unauthenticated(t *testing.T) {
 // database -- a route under it must never panic just because no one is
 // logged in.
 func TestProtectedRoute_WithoutSessionCookie(t *testing.T) {
-	r, _, err := New(testConfig(t), nil, nil, zerolog.Nop())
+	r, _, err := New(testConfig(t), nil, zerolog.Nop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestProtectedRoute_WithoutSessionCookie(t *testing.T) {
 // the SPA fallback rather than a bare 404 -- deep-linking or refreshing on
 // a frontend route depends on this.
 func TestUnknownRoute_FallsBackToSPA(t *testing.T) {
-	r, _, err := New(testConfig(t), nil, nil, zerolog.Nop())
+	r, _, err := New(testConfig(t), nil, zerolog.Nop())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 # Topology Webapp — Design
 
-A ground-up rewrite of the OSG topology registry as a Go + Postgres + S3 webapp,
+A ground-up rewrite of the OSG topology registry as a Go + Postgres webapp,
 replacing the hand-edited YAML + GitHub-PR workflow. The stack and patterns are
 modeled on the SWAMP and FabAID apps.
 
@@ -11,8 +11,10 @@ modeled on the SWAMP and FabAID apps.
 - **Faithful compatibility** with the existing topology data model and web API
   (byte-compatible XML for `/rgsummary/xml`, `/rgdowntime/xml`, `/vosummary/xml`,
   `/misc*`, etc.), plus a modern JSON API for the new frontend.
-- **Backup/restore round-trip** with the existing topology GitHub repo (modulo
-  whitespace) until an official switchover, plus S3 backups of the database.
+- **Restore round-trip** with the existing topology GitHub repo (modulo
+  whitespace) until an official switchover. Database backups themselves are
+  handled at the infrastructure layer (Postgres's own backup mechanism), not
+  by this app.
 - **Copy FabAID's authorization**, especially federated identity linking.
 - **Soft-delete only.** Nothing is hard-deleted.
 - **Propose-then-approve** change flow: creation/edit produce proposals, editable
@@ -23,7 +25,7 @@ modeled on the SWAMP and FabAID apps.
 
 - Go 1.26, `go-chi/chi` router, `jackc/pgx/v5` pool with a hand-written `Queries`
   layer (no ORM), `pressly/goose` migrations embedded via `go:embed` and run at
-  boot, `kelseyhightower/envconfig`, `rs/zerolog`, AWS SDK v2 for S3/MinIO.
+  boot, `kelseyhightower/envconfig`, `rs/zerolog`.
 - Next.js (App Router) + React + Tailwind (`brand`/`navy` palette), React Query,
   a `fetchJSON` API client. Production: static export → `go:embed` → single binary.
 
@@ -112,7 +114,7 @@ Dashboard views derive from this: *my resources*, *my pending registrations*
 **`audit_log`** — append-only `(id, actor_user_id, action, entity_kind,
 entity_id, proposal_id, detail JSONB, created_at)`. Every state change writes a
 row: proposal created/edited/submitted/approved/rejected/applied, role claimed
-via invite, identity linked/unlinked, soft-delete, backup/restore. No updates or
+via invite, identity linked/unlinked, soft-delete, restore. No updates or
 deletes are permitted on this table.
 
 ## Invites & role claims (from FabAID, extended)
@@ -122,8 +124,9 @@ to a **responsibility** (e.g. Security Contact on a resource). The invitee opens
 the link, onboards via OIDC (creating/linking an identity), and accepts the
 responsibility. Invite tokens are single-use, hashed at rest, and expire.
 
-## Backup / restore (administrator only)
+## Restore (administrator only)
 
 - **GitHub round-trip:** import the existing topology YAML tree into Postgres and
   export it back byte-for-byte (modulo whitespace). Proven by a round-trip test.
-- **S3:** encrypted database backup archives, keyed under `topology-backup-key`.
+- Database backups are handled at the infrastructure layer (Postgres's own
+  backup mechanism), not by this app.

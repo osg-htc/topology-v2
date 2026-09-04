@@ -5,7 +5,6 @@
 //
 //	topology-session-secret  -> OIDC-state / cookie HMAC secret
 //	topology-pii-kek         -> KEK that wraps per-row PII (email) DEKs
-//	topology-backup-key      -> base key for per-backup keys
 //
 // PII is protected with a two-level scheme: a fresh random Data Encryption Key
 // (DEK) encrypts each value with AES-256-GCM, and the DEK itself is wrapped
@@ -31,7 +30,6 @@ import (
 const (
 	labelSessionSecret = "topology-session-secret"
 	labelPIIKEK        = "topology-pii-kek"
-	labelBackupKey     = "topology-backup-key"
 )
 
 // Encryptor holds derived keys for PII envelope encryption.
@@ -66,40 +64,6 @@ func deriveKey(masterKey []byte, label string) ([]byte, error) {
 // SessionSecret returns the HMAC secret used to sign OIDC-state cookies.
 func SessionSecret(masterKey []byte) ([]byte, error) {
 	return deriveKey(masterKey, labelSessionSecret)
-}
-
-// BackupKey derives a per-backup key from the backup base key, using the backup
-// name as HKDF salt.
-func BackupKey(masterKey []byte, backupName string) ([]byte, error) {
-	base, err := deriveKey(masterKey, labelBackupKey)
-	if err != nil {
-		return nil, err
-	}
-	r := hkdf.New(sha256.New, base, []byte(backupName), []byte("topology-per-backup-key"))
-	key := make([]byte, 32)
-	if _, err := io.ReadFull(r, key); err != nil {
-		return nil, err
-	}
-	return key, nil
-}
-
-// BackupSeal encrypts a backup archive under a per-backup key derived from the
-// master key and the backup name (so each archive uses a distinct key).
-func BackupSeal(masterKey []byte, name string, plaintext []byte) ([]byte, error) {
-	key, err := BackupKey(masterKey, name)
-	if err != nil {
-		return nil, err
-	}
-	return gcmSeal(key, plaintext)
-}
-
-// BackupOpen reverses BackupSeal.
-func BackupOpen(masterKey []byte, name string, ciphertext []byte) ([]byte, error) {
-	key, err := BackupKey(masterKey, name)
-	if err != nil {
-		return nil, err
-	}
-	return gcmOpen(key, ciphertext)
 }
 
 // GenerateDEK returns a fresh 32-byte data encryption key.

@@ -33,14 +33,6 @@ type Config struct {
 	InstanceKey   string `envconfig:"INSTANCE_KEY"`
 	MasterKeyPath string `envconfig:"MASTER_KEY_PATH" default:".topology-master.key"`
 
-	// S3 / object storage (S3-compatible; works with MinIO)
-	S3Endpoint     string `envconfig:"S3_ENDPOINT"`
-	S3Region       string `envconfig:"S3_REGION" default:"us-east-1"`
-	S3Bucket       string `envconfig:"S3_BUCKET"`
-	S3AccessKey    string `envconfig:"S3_ACCESS_KEY"`
-	S3SecretKey    string `envconfig:"S3_SECRET_KEY"`
-	S3UsePathStyle bool   `envconfig:"S3_USE_PATH_STYLE" default:"true"`
-
 	// OIDC (CILogon by default). May be overridden at runtime via app_config.
 	OIDCIssuer       string `envconfig:"OIDC_ISSUER" default:"https://cilogon.org"`
 	OIDCClientID     string `envconfig:"OIDC_CLIENT_ID"`
@@ -50,7 +42,7 @@ type Config struct {
 	// institution IDs are immutable, so we cache aggressively in the DB.
 	InstitutionsAPI string `envconfig:"INSTITUTIONS_API" default:"https://topology-institutions.osg-htc.org/api"`
 
-	// GitHub topology repo (for backup/restore round-tripping during switchover).
+	// GitHub topology repo (the admin "Import from GitHub" restore action).
 	GitHubRepo  string `envconfig:"GITHUB_REPO" default:"opensciencegrid/topology"`
 	GitHubToken string `envconfig:"GITHUB_TOKEN"`
 
@@ -79,9 +71,6 @@ func (c *Config) ValidateServer() error {
 		missing = append(missing, "DATABASE_URL")
 	}
 	if c.IsProduction() {
-		if c.S3Bucket == "" {
-			missing = append(missing, "S3_BUCKET")
-		}
 		if c.OIDCClientID == "" {
 			missing = append(missing, "OIDC_CLIENT_ID")
 		}

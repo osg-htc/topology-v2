@@ -258,13 +258,6 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ username }),
       }),
-    listBackups: () => fetchJSON<{ backups: string[] }>("/admin/backups"),
-    createBackup: () => fetchJSON<{ key: string; size: number }>("/admin/backup", { method: "POST" }),
-    restore: (key: string) =>
-      fetchJSON<{ status: string }>("/admin/restore", {
-        method: "POST",
-        body: JSON.stringify({ key }),
-      }),
     importGitHub: (ref: string) =>
       fetchJSON<{ status: string; repo: string }>("/admin/import-github", {
         method: "POST",

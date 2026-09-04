@@ -1,6 +1,5 @@
-// Package backup archives and restores the topology tree: tar.gz of the on-disk
-// YAML form, encrypted for S3, and import from the existing topology GitHub repo
-// (for the pre-switchover round-trip). Only administrators invoke these paths.
+// Package backup restores the topology tree by importing from the existing
+// topology GitHub repo. Only administrators invoke this path.
 package backup
 
 import (
@@ -15,47 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// ArchiveDir walks dir and returns a gzip-compressed tar of its files, with
-// paths relative to dir.
-func ArchiveDir(dir string) ([]byte, error) {
-	out := &bytes.Buffer{}
-	gz := gzip.NewWriter(out)
-	tw := tar.NewWriter(gz)
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		hdr := &tar.Header{Name: filepath.ToSlash(rel), Mode: 0o644, Size: int64(len(data))}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-		_, err = tw.Write(data)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-	if err := gz.Close(); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
-}
 
 // ExtractToDir extracts a gzip-compressed tar into dest. It guards against path
 // traversal outside dest.

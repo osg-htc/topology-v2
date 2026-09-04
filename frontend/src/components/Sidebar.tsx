@@ -22,7 +22,7 @@ const adminNav = [
   { href: "/admin/settings", label: "Settings" },
   { href: "/institutions", label: "Institutions" },
   { href: "/admin/audit", label: "Audit log" },
-  { href: "/admin/backup", label: "Backup & restore" },
+  { href: "/admin/restore", label: "Restore" },
 ];
 
 export function Sidebar({ session }: { session: SessionInfo }) {
