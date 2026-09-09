@@ -32,6 +32,23 @@ func ContactIDFromEmail(email string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// ResourceActive reports whether a resource is active, applying the spec's
+// default: an omitted Active defaults to true, matching v1's
+// `self.data.get("Active", True)`. Every reader of a resource's Active field
+// must go through this rather than treating nil as false.
+func ResourceActive(active *bool) bool {
+	return active == nil || *active
+}
+
+// ResourceDisabled reports whether a resource is disabled. Disable is an
+// independent field from Active (both in v1 and in real source data --
+// resources exist with Active=false, Disable=false), so it must never be
+// derived as !Active; an omitted Disable defaults to false, matching v1's
+// `self.data.get("Disable", False)`.
+func ResourceDisabled(disable *bool) bool {
+	return disable != nil && *disable
+}
+
 // Facility is FACILITY.yaml. The facility name is the directory name. ID is a
 // pointer so an absent id (relying on the gen_id fallback) round-trips as absent.
 type Facility struct {
@@ -78,8 +95,12 @@ type Resource struct {
 	// proposal's JSON payload (resourceProposal.Resource), which never
 	// carries an ID -- without it, a nil ID marshals as "ID": null instead
 	// of being omitted, breaking the before/after snapshot's comparability.
-	ID           *int64                        `yaml:"ID,omitempty" json:"ID,omitempty"`
-	Active       *bool                         `yaml:"Active,omitempty"`
+	ID     *int64 `yaml:"ID,omitempty" json:"ID,omitempty"`
+	Active *bool  `yaml:"Active,omitempty"`
+	// Disable is an independent field from Active in both v1 and its YAML
+	// source data (real resources exist with e.g. Active=false, Disable=false)
+	// -- never derive one from the other. See ResourceActive/ResourceDisabled.
+	Disable      *bool                         `yaml:"Disable,omitempty"`
 	Description  string                        `yaml:"Description,omitempty"`
 	FQDN         string                        `yaml:"FQDN"`
 	FQDNAliases  []string                      `yaml:"FQDNAliases,omitempty"`

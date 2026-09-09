@@ -42,7 +42,7 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 		return nil
 	}
 	res := topology.Resource{
-		Active: row.Active, Description: row.Description, FQDN: row.FQDN, DN: row.DN,
+		Active: row.Active, Disable: row.Disable, Description: row.Description, FQDN: row.FQDN, DN: row.DN,
 		// emptySlice, not nil: the proposal schema types these as "array",
 		// and a nil slice marshals to JSON null, not [] -- which would fail
 		// schema validation the moment this snapshot gets merged into a

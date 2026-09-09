@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/bbockelm/topology-v2/internal/models"
+	"github.com/bbockelm/topology-v2/internal/topology"
 	"github.com/bbockelm/topology-v2/internal/xmlapi"
 )
 
@@ -144,7 +145,7 @@ func (h *Handler) MiscResourceJSON(w http.ResponseWriter, r *http.Request) {
 	for _, res := range rows {
 		out[res.Name] = map[string]any{
 			"ID": res.TopologyID, "Name": res.Name, "FQDN": res.FQDN,
-			"Active": res.Active, "ResourceGroup": res.RGName,
+			"Active": topology.ResourceActive(res.Active), "ResourceGroup": res.RGName,
 		}
 	}
 	respondJSON(w, http.StatusOK, out)
@@ -160,7 +161,7 @@ func (h *Handler) ResourcesJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{}
 	for _, res := range rows {
-		active := res.Active != nil && *res.Active
+		active := topology.ResourceActive(res.Active)
 		out[res.Name] = map[string]any{
 			"id": res.TopologyID, "name": res.Name, "fqdn": res.FQDN,
 			"active": active, "resource_group": res.RGName,

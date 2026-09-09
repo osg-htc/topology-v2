@@ -15,6 +15,7 @@
         "ID": { "type": ["integer", "null"] },
         "FQDN": { "type": "string", "minLength": 1 },
         "Active": { "type": ["boolean", "null"] },
+        "Disable": { "type": ["boolean", "null"] },
         "Description": { "type": "string" },
         "DN": { "type": "string" },
         "FQDNAliases": { "type": "array", "items": { "type": "string" } },

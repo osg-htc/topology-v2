@@ -124,7 +124,7 @@ largest measured blast radius:
 
 - `Resource.Active` default is **inverted** (`nil` → false; v1 defaults true) — 18 real resources flip.
 - `Resource.Disable` is fabricated as `!Active` instead of being an independent field — **338** real resources get a wrong value in `/rgsummary/xml`, the most-consumed feed.
-- `downtime_attrs_showpast` is a no-op, so the default `/rgdowntime/xml` returns 3,776 entries where v1 returns 15.
+- ~~`downtime_attrs_showpast` is a no-op~~ **FIXED** (commit `e00ab1a`) — the default `/rgdowntime/xml` now filters past entries like v1; see `internal/paritytest/rgdowntime_test.go`.
 
 **3 — Architecturally different by design.** Postgres vs git; propose-approve vs
 GitHub PRs; internal authenticated console vs public site. These are choices, not

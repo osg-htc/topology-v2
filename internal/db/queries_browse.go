@@ -148,6 +148,7 @@ type ResourceDetail struct {
 	Site            string   `json:"site"`
 	Facility        string   `json:"facility"`
 	Active          *bool    `json:"active"`
+	Disable         *bool    `json:"disable"`
 	Description     string   `json:"description"`
 	FQDN            string   `json:"fqdn"`
 	DN              string   `json:"dn"`
@@ -165,7 +166,7 @@ type ResourceDetail struct {
 func (q *Queries) GetResourceDetail(ctx context.Context, topologyID int64) (*ResourceDetail, error) {
 	d := &ResourceDetail{}
 	err := q.pool.QueryRow(ctx,
-		`SELECT r.name, r.topology_id, rg.name, s.name, f.name, r.active,
+		`SELECT r.name, r.topology_id, rg.name, s.name, f.name, r.active, r.disable,
 		        COALESCE(r.description,''), r.fqdn, COALESCE(r.dn,''),
 		        r.fqdn_aliases, r.tags, r.allowed_vos, r.vo_ownership, r.wlcg_information
 		 FROM resources r
@@ -173,7 +174,7 @@ func (q *Queries) GetResourceDetail(ctx context.Context, topologyID int64) (*Res
 		 JOIN sites s ON s.id = rg.site_id
 		 JOIN facilities f ON f.id = s.facility_id
 		 WHERE r.topology_id = $1 AND r.deleted_at IS NULL`, topologyID).
-		Scan(&d.Name, &d.TopologyID, &d.ResourceGroup, &d.Site, &d.Facility, &d.Active,
+		Scan(&d.Name, &d.TopologyID, &d.ResourceGroup, &d.Site, &d.Facility, &d.Active, &d.Disable,
 			&d.Description, &d.FQDN, &d.DN, &d.FQDNAliases, &d.Tags, &d.AllowedVOs,
 			&d.VOOwnership, &d.WLCGInformation)
 	if err != nil {
@@ -520,11 +521,11 @@ func (q *Queries) SoftDeleteFacilityByName(ctx context.Context, name, byUser str
 // those separately (see ReplaceResourceServices/ReplaceResourceContacts).
 func (q *Queries) UpdateResourceFields(ctx context.Context, r ResourceRow) error {
 	_, err := q.pool.Exec(ctx,
-		`UPDATE resources SET resource_group_id=$2, name=$3, active=$4, description=$5,
-		    fqdn=$6, dn=$7, fqdn_aliases=$8, tags=$9, allowed_vos=$10, vo_ownership=$11,
-		    wlcg_information=$12, extra=$13, updated_at=NOW()
+		`UPDATE resources SET resource_group_id=$2, name=$3, active=$4, disable=$5, description=$6,
+		    fqdn=$7, dn=$8, fqdn_aliases=$9, tags=$10, allowed_vos=$11, vo_ownership=$12,
+		    wlcg_information=$13, extra=$14, updated_at=NOW()
 		 WHERE topology_id=$1 AND deleted_at IS NULL`,
-		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, nullString(r.Description),
+		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, r.Disable, nullString(r.Description),
 		r.FQDN, nullString(r.DN), r.FQDNAliases, r.Tags, r.AllowedVOs,
 		nullBytes(r.VOOwnership), nullBytes(r.WLCGInformation), nullBytes(r.Extra))
 	return err

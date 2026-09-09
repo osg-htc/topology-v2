@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/bbockelm/topology-v2/internal/topology"
 )
 
 // ResourceDetailHandler returns a single resource with services, contacts, tags,
@@ -47,10 +49,11 @@ func (h *Handler) ResourceDetailHandler(w http.ResponseWriter, r *http.Request) 
 	// resource doesn't define itself. Each entry carries inherited_from.
 	contacts := h.effectiveResourceContacts(ctx, resID, d.ResourceGroup, d.Site, d.Facility)
 
-	active := d.Active != nil && *d.Active
+	active := topology.ResourceActive(d.Active)
+	disable := topology.ResourceDisabled(d.Disable)
 	out := map[string]any{
 		"name": d.Name, "id": d.TopologyID, "resource_group": d.ResourceGroup,
-		"site": d.Site, "facility": d.Facility, "active": active,
+		"site": d.Site, "facility": d.Facility, "active": active, "disable": disable,
 		"description": d.Description, "fqdn": d.FQDN, "dn": d.DN,
 		"fqdn_aliases": strOrEmpty(d.FQDNAliases), "tags": strOrEmpty(d.Tags),
 		"allowed_vos": strOrEmpty(d.AllowedVOs), "services": services, "contacts": contacts,

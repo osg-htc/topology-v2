@@ -235,7 +235,7 @@ func CreateResourceFromProposal(ctx context.Context, q *db.Queries, rgID, resNam
 func UpdateResourceFromProposal(ctx context.Context, q *db.Queries, topID int64, rgID, resName string, res *Resource, actorID string) error {
 	if err := q.UpdateResourceFields(ctx, db.ResourceRow{
 		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
-		Active: res.Active, Description: res.Description, FQDN: res.FQDN,
+		Active: res.Active, Disable: res.Disable, Description: res.Description, FQDN: res.FQDN,
 		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
 		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
 		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
@@ -255,7 +255,7 @@ func UpdateResourceFromProposal(ctx context.Context, q *db.Queries, topID int64,
 func insertResourceRow(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource, topID int64, explicit bool) error {
 	if err := q.InsertResource(ctx, db.ResourceRow{
 		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
-		Active: res.Active, Description: res.Description, FQDN: res.FQDN,
+		Active: res.Active, Disable: res.Disable, Description: res.Description, FQDN: res.FQDN,
 		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
 		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
 		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
@@ -391,7 +391,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 	}
 	for _, r := range resources {
 		res := &Resource{
-			ID: idPtr(r.TopologyID, r.IDExplicit), Active: r.Active, Description: r.Description,
+			ID: idPtr(r.TopologyID, r.IDExplicit), Active: r.Active, Disable: r.Disable, Description: r.Description,
 			FQDN: r.FQDN, DN: r.DN, FQDNAliases: r.FQDNAliases, Tags: r.Tags,
 			AllowedVOs: r.AllowedVOs, VOOwnership: fromJSONAny(r.VOOwnership),
 			WLCGInformation: fromJSONAny(r.WLCGInformation), Extra: fromJSON(r.Extra),
