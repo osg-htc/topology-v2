@@ -51,7 +51,7 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 		topID, explicit := resolveID(rg.GroupID, name)
 		id, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{
 			GroupID: topID, SiteID: siteIDs[siteName], Name: name,
-			Production: rg.Production, SupportCenter: rg.SupportCenter,
+			Production: rg.Production, Disable: rg.Disable, SupportCenter: rg.SupportCenter,
 			GroupDescription: rg.GroupDescription, Extra: mustJSON(rg.Extra),
 			IDExplicit: explicit,
 		})
@@ -380,7 +380,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 	rgByID := map[string]*ResourceGroup{}
 	for _, rg := range rgs {
 		g := &ResourceGroup{
-			Name: rg.Name, GroupID: idPtr(rg.GroupID, rg.IDExplicit), Production: rg.Production,
+			Name: rg.Name, GroupID: idPtr(rg.GroupID, rg.IDExplicit), Production: rg.Production, Disable: rg.Disable,
 			SupportCenter: rg.SupportCenter, GroupDescription: rg.GroupDescription,
 			Resources: map[string]*Resource{}, Extra: fromJSON(rg.Extra),
 		}

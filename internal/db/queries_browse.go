@@ -558,12 +558,12 @@ func (q *Queries) ReplaceResourceContactsBegin(ctx context.Context, resourceID i
 // rename must locate the existing row by what it WAS called, not by what
 // it's being renamed TO (which, on a rename, doesn't exist yet and would
 // silently match zero rows).
-func (q *Queries) UpdateResourceGroupFields(ctx context.Context, targetName, newName, siteID string, production *bool, supportCenter, groupDescription string) error {
+func (q *Queries) UpdateResourceGroupFields(ctx context.Context, targetName, newName, siteID string, production, disable *bool, supportCenter, groupDescription string) error {
 	_, err := q.pool.Exec(ctx,
 		`UPDATE resource_groups
-		 SET name=$2, site_id=$3, production=$4, support_center=$5, group_description=$6, updated_at=NOW()
+		 SET name=$2, site_id=$3, production=$4, disable=$5, support_center=$6, group_description=$7, updated_at=NOW()
 		 WHERE name=$1 AND deleted_at IS NULL`,
-		targetName, newName, siteID, production, nullString(supportCenter), nullString(groupDescription))
+		targetName, newName, siteID, production, disable, nullString(supportCenter), nullString(groupDescription))
 	return err
 }
 

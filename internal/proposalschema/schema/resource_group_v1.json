@@ -23,6 +23,12 @@
         "null"
       ]
     },
+    "disable": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "support_center": {
       "type": "string"
     },

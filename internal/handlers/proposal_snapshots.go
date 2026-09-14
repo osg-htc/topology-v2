@@ -96,7 +96,7 @@ func (h *Handler) snapshotResourceGroupState(ctx context.Context, targetName str
 		return nil
 	}
 	b, err := json.Marshal(rgProposal{
-		Name: row.Name, Site: row.SiteName, Production: row.Production,
+		Name: row.Name, Site: row.SiteName, Production: row.Production, Disable: row.Disable,
 		SupportCenter: row.SupportCenter, GroupDescription: row.GroupDescription, Contacts: contacts,
 	})
 	if err != nil {
