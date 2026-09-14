@@ -92,9 +92,13 @@ func ReadTree(root string) (*Topology, error) {
 	return t, nil
 }
 
-// SupportCenterYAML is one entry in support-centers.yaml.
+// SupportCenterYAML is one entry in support-centers.yaml. ID is a pointer so
+// an explicit "ID: 0" (e.g. "Self Supported") round-trips distinctly from an
+// absent ID falling back to the name-hash -- a plain int64 could not tell
+// the two apart, and silently replaced a real, explicit 0 with a generated
+// hash (see ImportSupportCenters).
 type SupportCenterYAML struct {
-	ID          int64  `yaml:"ID"`
+	ID          *int64 `yaml:"ID,omitempty"`
 	LongName    string `yaml:"LongName,omitempty"`
 	Community   string `yaml:"Community,omitempty"`
 	Description string `yaml:"Description,omitempty"`
