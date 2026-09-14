@@ -79,7 +79,11 @@ type Site struct {
 
 // ResourceGroup is a <RG>.yaml file. The RG name is the filename minus ".yaml".
 type ResourceGroup struct {
-	Production       *bool                  `yaml:"Production,omitempty"`
+	Production *bool `yaml:"Production,omitempty"`
+	// Disable is an independent field from Production, defaulting to false
+	// when omitted (v1: new_rg.update({"Disable": False}) before overlaying
+	// the RG's own YAML) -- see ResourceDisabled.
+	Disable          *bool                  `yaml:"Disable,omitempty"`
 	GroupID          *int64                 `yaml:"GroupID,omitempty"`
 	SupportCenter    string                 `yaml:"SupportCenter,omitempty"`
 	GroupDescription string                 `yaml:"GroupDescription,omitempty"`
