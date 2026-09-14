@@ -369,7 +369,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 	matchedService := false
 
 	for _, r := range rows {
-		active := r.Active != nil && *r.Active
+		active := topology.ResourceActive(r.Active)
 		if f.Active != nil && active != *f.Active {
 			continue
 		}
@@ -395,7 +395,7 @@ func buildResources(ctx context.Context, q *db.Queries, enc *crypto.Encryptor, r
 		}
 
 		rx := ResourceXML{
-			ID: r.TopologyID, Name: r.Name, Active: active, Disable: !active,
+			ID: r.TopologyID, Name: r.Name, Active: active, Disable: topology.ResourceDisabled(r.Disable),
 			Description: r.Description, FQDN: r.FQDN,
 			Tags:         TagsXML{Tags: r.Tags},
 			FQDNAliases:  FQDNAliasesXML{Aliases: r.FQDNAliases},

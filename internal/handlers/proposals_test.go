@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -733,4 +734,105 @@ func TestListPendingProposals_SetsCanDecide(t *testing.T) {
 			}
 		}
 	})
+}
+
+// requestWithBody builds a request carrying both a JSON body and the same
+// context values asUser installs -- asUser alone always sends a nil body,
+// which CreateProposal (a real json.Decode of r.Body) needs populated.
+func requestWithBody(t *testing.T, userID string, body any, roles ...string) *http.Request {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshaling request body: %v", err)
+	}
+	ctx := context.WithValue(context.Background(), ctxUser, &models.User{ID: userID})
+	ctx = context.WithValue(ctx, ctxRoles, roles)
+	return httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(b)).WithContext(ctx)
+}
+
+// TestCreateAndApplyResourceProposal_PreservesDisableWhenFormOmitsIt is the
+// full end-to-end regression test for the Disable-fabrication fix: the
+// resource edit form has no UI control for Disable at all, so a real
+// submission never mentions it. Before this fix, Disable didn't exist as a
+// modeled field at all (it was fabricated as !Active at render time); now
+// that it's real, stored data, an editor that doesn't model it must not
+// silently wipe it via the write-time merge (see mergeProposedState) -- this
+// exercises the actual CreateProposal -> snapshot -> merge -> ApproveProposal
+// pipeline, not just the merge function in isolation.
+func TestCreateAndApplyResourceProposal_PreservesDisableWhenFormOmitsIt(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	actorID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "regtest-disable-actor", Status: "active", IsProvisioned: true})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	facID, err := q.InsertFacility(ctx, db.FacilityRow{TopologyID: 900000300, Name: "regtest-disable-facility", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertFacility: %v", err)
+	}
+	siteID, err := q.InsertSite(ctx, db.SiteRow{TopologyID: 900000301, FacilityID: facID, Name: "regtest-disable-site", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertSite: %v", err)
+	}
+	rgID, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{GroupID: 900000302, SiteID: siteID, Name: "regtest-disable-rg", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertResourceGroup: %v", err)
+	}
+	const topID int64 = 900000303
+	active, disable := true, true
+	if err := q.InsertResource(ctx, db.ResourceRow{
+		TopologyID: topID, ResourceGroupID: rgID, Name: "regtest-disable-resource",
+		Active: &active, Disable: &disable, FQDN: "regtest-disable.example.org",
+		Description: "before edit", IDExplicit: true,
+	}); err != nil {
+		t.Fatalf("InsertResource: %v", err)
+	}
+
+	// Submit an edit through the same path the real (Disable-less) edit form
+	// uses: entity_kind=resource, operation=update, a partial resource
+	// payload that never mentions Disable at all.
+	createBody := map[string]any{
+		"entity_kind": models.KindResource, "operation": models.OpUpdate,
+		"target_name": strconv.FormatInt(topID, 10), "submit": true,
+		"proposed_state": map[string]any{
+			"resource_group": "regtest-disable-rg", "name": "regtest-disable-resource",
+			"resource": map[string]any{
+				"FQDN": "regtest-disable.example.org", "Description": "after edit",
+			},
+		},
+	}
+	w := httptest.NewRecorder()
+	h.CreateProposal(w, requestWithBody(t, actorID, createBody))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateProposal: status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding CreateProposal response: %v", err)
+	}
+
+	w = httptest.NewRecorder()
+	h.ApproveProposal(w, withRouteParam(asUser(actorID, models.RoleAdministrator), "id", created.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("ApproveProposal: status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	row, err := q.GetResourceRow(ctx, topID)
+	if err != nil {
+		t.Fatalf("GetResourceRow: %v", err)
+	}
+	if row.Description != "after edit" {
+		t.Fatalf("Description = %q, want %q (the edit that was actually submitted)", row.Description, "after edit")
+	}
+	if row.Disable == nil || !*row.Disable {
+		t.Fatalf("Disable = %v, want true (preserved from before the edit) -- an editor with no Disable UI silently cleared it", row.Disable)
+	}
 }

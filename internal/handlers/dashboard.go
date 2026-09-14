@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/bbockelm/topology-v2/internal/models"
+	"github.com/bbockelm/topology-v2/internal/topology"
 )
 
 // DashboardHandler returns the resource-centric home view: the resources the
@@ -44,7 +45,7 @@ func (h *Handler) DashboardHandler(w http.ResponseWriter, r *http.Request) {
 	resources := make([]map[string]any, 0, len(myResources))
 	for _, res := range myResources {
 		resources = append(resources, map[string]any{
-			"name": res.Name, "fqdn": res.FQDN, "active": res.Active,
+			"name": res.Name, "fqdn": res.FQDN, "active": topology.ResourceActive(res.Active),
 			"resource_group": res.RGName, "id": res.TopologyID,
 		})
 	}

@@ -293,6 +293,38 @@ func TestMergeProposedState_Resource_ServiceFieldsMergedPerKey(t *testing.T) {
 	}
 }
 
+// TestMergeProposedState_Resource_DisablePreservedWhenOmitted guards the
+// bug-fix scenario for Resource.Disable specifically: the resource edit form
+// has no UI control for Disable at all, so every real submission omits it --
+// the merge must preserve whatever Disable the base snapshot carried, never
+// silently clear it just because no editor models it.
+func TestMergeProposedState_Resource_DisablePreservedWhenOmitted(t *testing.T) {
+	base := rawJSON(t, map[string]interface{}{
+		"name":           "myresource",
+		"resource_group": "RG1",
+		"resource": map[string]interface{}{
+			"FQDN":    "host.example.org",
+			"Active":  false,
+			"Disable": false,
+		},
+	})
+	// Mirrors the real edit form: no Disable key at all.
+	incoming := rawJSON(t, map[string]interface{}{
+		"name":           "myresource",
+		"resource_group": "RG1",
+		"resource": map[string]interface{}{
+			"FQDN":        "host.example.org",
+			"Description": "edited without touching Disable",
+		},
+	})
+
+	merged := mergeProposedState(models.KindResource, base, incoming)
+	res := decodeMap(t, merged)["resource"].(map[string]interface{})
+	if disable, ok := res["Disable"]; !ok || disable != false {
+		t.Errorf("Disable = %v (present: %v), want false (preserved from base, not wiped)", disable, ok)
+	}
+}
+
 func TestMergeProposedState_FallsBackWhenNotDecodable(t *testing.T) {
 	incoming := json.RawMessage(`[1,2,3]`) // an array, not an object
 	base := rawJSON(t, map[string]interface{}{"name": "x"})

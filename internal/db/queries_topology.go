@@ -68,6 +68,7 @@ type ResourceRow struct {
 	RGName          string // populated on export
 	Name            string
 	Active          *bool
+	Disable         *bool
 	Description     string
 	FQDN            string
 	DN              string
@@ -254,11 +255,11 @@ func (q *Queries) InsertResourceGroup(ctx context.Context, r ResourceGroupRow) (
 // id-resolution policies) -- there is no separate surrogate key to RETURNING.
 func (q *Queries) InsertResource(ctx context.Context, r ResourceRow) error {
 	_, err := q.pool.Exec(ctx,
-		`INSERT INTO resources (topology_id, resource_group_id, name, active, description,
+		`INSERT INTO resources (topology_id, resource_group_id, name, active, disable, description,
 		    fqdn, dn, fqdn_aliases, tags, allowed_vos, vo_ownership, wlcg_information,
 		    extra, id_explicit)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, nullString(r.Description),
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		r.TopologyID, r.ResourceGroupID, r.Name, r.Active, r.Disable, nullString(r.Description),
 		r.FQDN, nullString(r.DN), r.FQDNAliases, r.Tags, r.AllowedVOs,
 		nullBytes(r.VOOwnership), nullBytes(r.WLCGInformation), nullBytes(r.Extra),
 		r.IDExplicit)
@@ -452,7 +453,7 @@ func (q *Queries) ListResourceGroups(ctx context.Context) ([]ResourceGroupRow, e
 
 func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
+		`SELECT r.topology_id, rg.name, r.name, r.active, r.disable, COALESCE(r.description,''),
 		        r.fqdn, COALESCE(r.dn,''), r.fqdn_aliases, r.tags, r.allowed_vos,
 		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit
 		 FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
@@ -464,7 +465,7 @@ func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 	var out []ResourceRow
 	for rows.Next() {
 		var r ResourceRow
-		if err := rows.Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
+		if err := rows.Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Disable, &r.Description,
 			&r.FQDN, &r.DN, &r.FQDNAliases, &r.Tags, &r.AllowedVOs,
 			&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit); err != nil {
 			return nil, err
@@ -479,12 +480,12 @@ func (q *Queries) ListResources(ctx context.Context) ([]ResourceRow, error) {
 func (q *Queries) GetResourceRow(ctx context.Context, topologyID int64) (*ResourceRow, error) {
 	var r ResourceRow
 	err := q.pool.QueryRow(ctx,
-		`SELECT r.topology_id, rg.name, r.name, r.active, COALESCE(r.description,''),
+		`SELECT r.topology_id, rg.name, r.name, r.active, r.disable, COALESCE(r.description,''),
 		        r.fqdn, COALESCE(r.dn,''), r.fqdn_aliases, r.tags, r.allowed_vos,
 		        r.vo_ownership, r.wlcg_information, r.extra, r.id_explicit, r.updated_at
 		 FROM resources r JOIN resource_groups rg ON rg.id = r.resource_group_id
 		 WHERE r.topology_id = $1 AND r.deleted_at IS NULL`, topologyID,
-	).Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Description,
+	).Scan(&r.TopologyID, &r.RGName, &r.Name, &r.Active, &r.Disable, &r.Description,
 		&r.FQDN, &r.DN, &r.FQDNAliases, &r.Tags, &r.AllowedVOs,
 		&r.VOOwnership, &r.WLCGInformation, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
