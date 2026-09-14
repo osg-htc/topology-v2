@@ -70,7 +70,7 @@ func (h *Handler) fileReplacement(r *http.Request, req createReplacementRequest)
 		EntityKind: req.EntityKind, EntityName: req.EntityName, ContactType: req.ContactType, Rank: req.Rank,
 		IncumbentUserID: slot.UserID, IncumbentName: slot.Name,
 		RequesterUserID: req.RequesterUserID, RequesterName: requester.DisplayName,
-		RequesterContactID: h.primaryCILogonID(ctx, req.RequesterUserID), Note: req.Note,
+		RequesterContactID: requester.LegacyContactID, Note: req.Note,
 	})
 	if err != nil {
 		return "", &httpErr{http.StatusInternalServerError, "creating request"}
@@ -121,8 +121,13 @@ func (h *Handler) DecideReplacement(w http.ResponseWriter, r *http.Request, appr
 	}
 	status := "rejected"
 	if approve {
+		requester, err := h.queries.GetUser(ctx, rep.RequesterUser)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "loading requester")
+			return
+		}
 		if err := h.queries.ReplaceContactSlot(ctx, rep.EntityKind, rep.EntityName, rep.ContactType, rep.Rank,
-			rep.RequesterName, h.primaryCILogonID(ctx, rep.RequesterUser), rep.RequesterUser, u.ID); err != nil {
+			rep.RequesterName, requester.LegacyContactID, rep.RequesterUser, u.ID); err != nil {
 			respondError(w, http.StatusInternalServerError, "applying replacement: "+err.Error())
 			return
 		}
