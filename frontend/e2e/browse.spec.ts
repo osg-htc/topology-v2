@@ -25,7 +25,9 @@ test("resource detail page opens with contacts and services sections", async ({ 
   const resources = await (await page.request.get("/api/v1/resources")).json();
   const names = Object.keys(resources);
   test.skip(names.length === 0, "needs at least one resource");
-  await page.goto(`/resources/detail?name=${encodeURIComponent(names[0])}`);
+  // The real "Open X" links use ?id=<topology_id>, not ?name= -- the detail
+  // page looks up by the immutable id, not the mutable name.
+  await page.goto(`/resources/detail?id=${resources[names[0]].id}`);
   await expect(page.getByRole("heading", { name: "Services" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Placement" })).toBeVisible();
