@@ -22,10 +22,25 @@ RUN CGO_ENABLED=0 go build -tags embed_frontend \
     -ldflags "-X github.com/bbockelm/topology-v2/internal/version.Version=${VERSION} -X github.com/bbockelm/topology-v2/internal/version.Commit=${COMMIT}" \
     -o /out/topology-server ./cmd/server
 
-# Stage 3: minimal runtime.
+# Stage 3: runtime. Alpine plus a small set of debugging tools.
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates && adduser -D -u 10001 topology
+RUN apk add --no-cache \
+        ca-certificates \
+        bash \
+        curl \
+        jq \
+        bind-tools \
+        busybox-extras \
+        postgresql16-client \
+        procps \
+        sudo \
+    && adduser -D -u 10001 topology \
+    && echo "topology ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/topology \
+    && chmod 0440 /etc/sudoers.d/topology
 COPY --from=backend /out/topology-server /usr/local/bin/topology-server
+# Runs unprivileged by default. To debug as root, either:
+#   docker exec -u root -it <container> bash
+# or, from a shell inside the container:  sudo -i
 USER topology
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/topology-server"]
