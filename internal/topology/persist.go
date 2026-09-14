@@ -109,9 +109,9 @@ func ImportServices(ctx context.Context, q *db.Queries, services map[string]int6
 // ImportSupportCenters loads support-centers.yaml into the support_centers table.
 func ImportSupportCenters(ctx context.Context, q *db.Queries, scs map[string]SupportCenterYAML) error {
 	for name, sc := range scs {
-		id := sc.ID
-		if id == 0 {
-			id = GenID(name)
+		id := GenID(name)
+		if sc.ID != nil {
+			id = *sc.ID
 		}
 		if err := q.UpsertSupportCenter(ctx, id, name, sc.LongName, sc.Community, sc.Description); err != nil {
 			return fmt.Errorf("upsert support center %q: %w", name, err)
@@ -325,8 +325,9 @@ func ExportFullToDir(ctx context.Context, q *db.Queries, root string) error {
 	if len(scs) > 0 {
 		m := map[string]SupportCenterYAML{}
 		for _, s := range scs {
+			id := s.ID
 			m[s.Name] = SupportCenterYAML{
-				ID: s.ID, LongName: s.LongName, Community: s.Community, Description: s.Description,
+				ID: &id, LongName: s.LongName, Community: s.Community, Description: s.Description,
 			}
 		}
 		if err := writeYAMLFile(filepath.Join(root, "support-centers.yaml"), m); err != nil {
