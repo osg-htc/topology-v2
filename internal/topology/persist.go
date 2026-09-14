@@ -86,7 +86,11 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 			}
 		}
 	}
-	return nil
+
+	// Re-sync the app-created-resource id sequence against the ids just
+	// loaded -- see ResyncAppCreatedResourceIDSeq. Every real import goes
+	// through this function, so this is the one place that needs to run it.
+	return q.ResyncAppCreatedResourceIDSeq(ctx)
 }
 
 // ImportServices loads the services.yaml name->id map into the services table.
