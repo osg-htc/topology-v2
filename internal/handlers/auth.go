@@ -623,7 +623,7 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "invalid claim")
 			return
 		}
-		cilogon := h.primaryCILogonID(ctx, u.ID)
+		cilogon := u.LegacyContactID
 		kind := claim.EntityKind
 		if kind == "" {
 			kind = models.KindResource

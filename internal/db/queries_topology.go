@@ -277,6 +277,22 @@ func (q *Queries) NextAppCreatedResourceID(ctx context.Context) (int64, error) {
 	return id, err
 }
 
+// ResyncAppCreatedResourceIDSeq re-seeds resources_app_created_id_seq to one
+// past the highest explicit (human-assigned) topology_id currently in the
+// database. Migration 011 seeds this sequence only once, at migration time --
+// on a freshly-migrated, still-empty database that seed is 1, and nothing
+// ever re-synced it against real data afterwards. A full topology import
+// (the only path that loads real, legacy-assigned explicit ids) must call
+// this once its resources are loaded, or every app-created resource keeps
+// drawing from a sequence stuck near 1 -- a live collision risk against any
+// legacy resource whose hand-assigned id is also small.
+func (q *Queries) ResyncAppCreatedResourceIDSeq(ctx context.Context) error {
+	_, err := q.pool.Exec(ctx, `
+		SELECT setval('resources_app_created_id_seq',
+			(SELECT COALESCE(MAX(topology_id), 0) FROM resources WHERE id_explicit) + 1, false)`)
+	return err
+}
+
 func (q *Queries) InsertResourceService(ctx context.Context, r ResourceServiceRow) error {
 	_, err := q.pool.Exec(ctx,
 		`INSERT INTO resource_services (resource_id, service_name, description, details, ordinal)

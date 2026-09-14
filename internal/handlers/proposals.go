@@ -375,6 +375,13 @@ func (h *Handler) ListPendingProposals(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusInternalServerError, "loading proposals")
 			return
 		}
+		// Every row here is already status=pending (see the query), and a
+		// manager/admin can decide any proposal (see canDecideProposal), so
+		// can_decide is unconditionally true -- mirroring GetProposal's
+		// per-proposal computation.
+		for _, p := range ps {
+			p.CanDecide = true
+		}
 		respondJSON(w, http.StatusOK, ps)
 		return
 	}
@@ -386,6 +393,7 @@ func (h *Handler) ListPendingProposals(w http.ResponseWriter, r *http.Request) {
 	out := make([]*models.Proposal, 0, len(dts))
 	for _, p := range dts {
 		if h.canDecideProposal(ctx, r, p) {
+			p.CanDecide = true
 			out = append(out, p)
 		}
 	}

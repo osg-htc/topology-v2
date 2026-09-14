@@ -11,22 +11,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/testsupport"
 	"github.com/bbockelm/topology-v2/internal/topology"
 )
-
-// withRouteParam attaches a chi route param the way the router would, for
-// testing handlers that read chi.URLParam without going through chi's
-// routing tree.
-func withRouteParam(r *http.Request, key, value string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-}
 
 // asUser builds a request carrying the same context values RequireAuth
 // installs, for testing handler methods that read currentUser/rolesFromContext
@@ -629,6 +618,120 @@ func TestCanDecideProposal_DowntimeContactCarveOut(t *testing.T) {
 		p := &models.Proposal{EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: marshalDowntime(ownContactResource)}
 		if !h.canDecideProposal(ctx, asUser(otherUserID, models.RoleManager), p) {
 			t.Fatalf("expected a manager to be able to decide any downtime")
+		}
+	})
+}
+
+// TestListPendingProposals_SetsCanDecide guards the fix for a real API bug:
+// ListPendingProposals filters its non-admin queue via canDecideProposal but
+// never assigned the result's CanDecide field, so can_decide was always false
+// in the JSON response even for an entry present precisely because the user
+// can decide it -- unlike GetProposal, which computes CanDecide explicitly.
+// Every row either endpoint returns is already status=pending (see the
+// underlying queries), so can_decide should always be true here.
+func TestListPendingProposals_SetsCanDecide(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	facID, err := q.InsertFacility(ctx, db.FacilityRow{TopologyID: 900000090, Name: "regtest-cd-facility", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertFacility: %v", err)
+	}
+	siteID, err := q.InsertSite(ctx, db.SiteRow{TopologyID: 900000091, FacilityID: facID, Name: "regtest-cd-site", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertSite: %v", err)
+	}
+	rgID, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{GroupID: 900000092, SiteID: siteID, Name: "regtest-cd-rg", IDExplicit: true})
+	if err != nil {
+		t.Fatalf("InsertResourceGroup: %v", err)
+	}
+	const resourceName = "regtest-cd-resource"
+	if err := q.InsertResource(ctx, db.ResourceRow{
+		TopologyID: 900000093, ResourceGroupID: rgID, Name: resourceName, FQDN: "regtest-cd.example.org", IDExplicit: true,
+	}); err != nil {
+		t.Fatalf("InsertResource: %v", err)
+	}
+
+	contactID := emailSHA1("cd-contact@example.org")
+	contactUserID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "CD Contact", Status: "active", LegacyContactID: contactID})
+	if err != nil {
+		t.Fatalf("CreateUser (contact): %v", err)
+	}
+	if err := q.InsertResourceContact(ctx, db.ResourceContactRow{
+		ResourceID: 900000093, ContactType: "Administrative Contact", Rank: "Primary",
+		ContactName: "CD Contact", ContactID: contactID,
+	}); err != nil {
+		t.Fatalf("InsertResourceContact: %v", err)
+	}
+	otherUserID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "Unrelated User", Status: "active"})
+	if err != nil {
+		t.Fatalf("CreateUser (unrelated): %v", err)
+	}
+
+	state, err := json.Marshal(map[string]any{"resource": resourceName, "class": "SCHEDULED", "start_time": "", "end_time": ""})
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	if _, err := q.CreateProposal(ctx, db.CreateProposalParams{
+		EntityKind: models.KindDowntime, Operation: models.OpCreate, ProposedState: state,
+		Status: models.ProposalPending, CreatedBy: otherUserID,
+	}); err != nil {
+		t.Fatalf("CreateProposal: %v", err)
+	}
+
+	decode := func(w *httptest.ResponseRecorder) []*models.Proposal {
+		var ps []*models.Proposal
+		if err := json.Unmarshal(w.Body.Bytes(), &ps); err != nil {
+			t.Fatalf("decoding response: %v, body: %s", err, w.Body.String())
+		}
+		return ps
+	}
+
+	t.Run("the resource's own contact sees can_decide true in their queue", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ListPendingProposals(w, asUser(contactUserID, models.RoleUser))
+		if w.Code != http.StatusOK {
+			t.Fatalf("ListPendingProposals: status = %d, body = %s", w.Code, w.Body.String())
+		}
+		ps := decode(w)
+		if len(ps) != 1 {
+			t.Fatalf("expected exactly 1 proposal in the contact's queue, got %d", len(ps))
+		}
+		if !ps[0].CanDecide {
+			t.Fatalf("can_decide = false for a proposal present precisely because this user can decide it -- the exact bug")
+		}
+	})
+
+	t.Run("an unrelated user's queue is empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ListPendingProposals(w, asUser(otherUserID, models.RoleUser))
+		if w.Code != http.StatusOK {
+			t.Fatalf("ListPendingProposals: status = %d, body = %s", w.Code, w.Body.String())
+		}
+		if ps := decode(w); len(ps) != 0 {
+			t.Fatalf("expected an empty queue for an unrelated user, got %d entries", len(ps))
+		}
+	})
+
+	t.Run("a manager sees can_decide true across the whole reviewer queue", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ListPendingProposals(w, asUser(otherUserID, models.RoleManager))
+		if w.Code != http.StatusOK {
+			t.Fatalf("ListPendingProposals: status = %d, body = %s", w.Code, w.Body.String())
+		}
+		ps := decode(w)
+		if len(ps) == 0 {
+			t.Fatalf("expected at least 1 proposal in the manager's queue")
+		}
+		for _, p := range ps {
+			if !p.CanDecide {
+				t.Fatalf("can_decide = false for proposal %s in a manager's queue, want true", p.ID)
+			}
 		}
 	})
 }

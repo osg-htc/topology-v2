@@ -80,17 +80,3 @@ func (h *Handler) legacyContactIDs(ctx context.Context, userID string) []string 
 	}
 	return ids
 }
-
-// primaryCILogonID returns the user's first CILogon id across their identities.
-func (h *Handler) primaryCILogonID(ctx context.Context, userID string) string {
-	rows, err := h.queries.ListUserIdentities(ctx, userID)
-	if err != nil {
-		return ""
-	}
-	for _, row := range rows {
-		if id := row.Identity().CILogonID; id != "" {
-			return id
-		}
-	}
-	return ""
-}
