@@ -285,7 +285,9 @@ func BuildResourceSummary(ctx context.Context, q *db.Queries, enc *crypto.Encryp
 		if !idAny(f.RGIDs) && !f.RGIDs[rg.GroupID] {
 			continue
 		}
-		production := rg.Production == nil || *rg.Production
+		// v1 default: an omitted Production is false (ITB), not true -- see
+		// is_true(yaml_data.get("Production", "")) in topology.py.
+		production := rg.Production != nil && *rg.Production
 		if (production && !f.GridTypeProd && f.gridTypeSet()) ||
 			(!production && !f.GridTypeITB && f.gridTypeSet()) {
 			continue
@@ -328,7 +330,7 @@ func BuildResourceSummary(ctx context.Context, q *db.Queries, enc *crypto.Encryp
 			GridType:         gt,
 			GroupID:          rg.GroupID,
 			GroupName:        rg.Name,
-			Disable:          false,
+			Disable:          topology.ResourceDisabled(rg.Disable),
 			Facility:         FacilityXML{ID: fac.TopologyID, InstitutionID: fac.InstitutionID, Name: fac.Name, IsCCStar: ccstar},
 			Site:             siteXML(site, ccstar),
 			SupportCenter:    SCXML{ID: scID, Name: rg.SupportCenter},

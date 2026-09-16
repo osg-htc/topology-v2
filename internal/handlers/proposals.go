@@ -710,6 +710,7 @@ type rgProposal struct {
 	Name             string             `json:"name"`
 	Site             string             `json:"site"`
 	Production       *bool              `json:"production"`
+	Disable          *bool              `json:"disable"`
 	SupportCenter    string             `json:"support_center"`
 	GroupDescription string             `json:"group_description"`
 	Contacts         []db.EntityContact `json:"contacts"`
@@ -732,7 +733,7 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 	}
 	// Update in place (preserving child resources); create when new.
 	if p.Operation == models.OpUpdate {
-		if err := q.UpdateResourceGroupFields(ctx, p.TargetName, rp.Name, siteID, rp.Production, rp.SupportCenter, rp.GroupDescription); err != nil {
+		if err := q.UpdateResourceGroupFields(ctx, p.TargetName, rp.Name, siteID, rp.Production, rp.Disable, rp.SupportCenter, rp.GroupDescription); err != nil {
 			return err
 		}
 	} else {
@@ -740,9 +741,13 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 		if rp.Production != nil {
 			prod = *rp.Production
 		}
+		disable := false
+		if rp.Disable != nil {
+			disable = *rp.Disable
+		}
 		if _, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{
 			GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
-			Production: &prod, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
+			Production: &prod, Disable: &disable, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,
 			IDExplicit: false,
 		}); err != nil {
 			return err

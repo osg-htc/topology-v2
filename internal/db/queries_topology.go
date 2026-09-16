@@ -53,6 +53,7 @@ type ResourceGroupRow struct {
 	SiteName         string // populated on export
 	Name             string
 	Production       *bool
+	Disable          *bool
 	SupportCenter    string
 	GroupDescription string
 	Extra            []byte
@@ -242,10 +243,10 @@ func (q *Queries) InsertSite(ctx context.Context, r SiteRow) (string, error) {
 func (q *Queries) InsertResourceGroup(ctx context.Context, r ResourceGroupRow) (string, error) {
 	var id string
 	err := q.pool.QueryRow(ctx,
-		`INSERT INTO resource_groups (group_id, site_id, name, production, support_center,
+		`INSERT INTO resource_groups (group_id, site_id, name, production, disable, support_center,
 		    group_description, extra, id_explicit)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		r.GroupID, r.SiteID, r.Name, r.Production, nullString(r.SupportCenter),
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+		r.GroupID, r.SiteID, r.Name, r.Production, r.Disable, nullString(r.SupportCenter),
 		nullString(r.GroupDescription), nullBytes(r.Extra), r.IDExplicit).Scan(&id)
 	return id, err
 }
@@ -415,12 +416,12 @@ func (q *Queries) ListSites(ctx context.Context) ([]SiteRow, error) {
 func (q *Queries) GetResourceGroupRow(ctx context.Context, name string) (*ResourceGroupRow, error) {
 	var r ResourceGroupRow
 	err := q.pool.QueryRow(ctx,
-		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production,
+		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production, rg.disable,
 		        COALESCE(rg.support_center,''), COALESCE(rg.group_description,''),
 		        rg.extra, rg.id_explicit, rg.updated_at
 		 FROM resource_groups rg JOIN sites s ON s.id = rg.site_id
 		 WHERE rg.name = $1 AND rg.deleted_at IS NULL`, name,
-	).Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production,
+	).Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production, &r.Disable,
 		&r.SupportCenter, &r.GroupDescription, &r.Extra, &r.IDExplicit, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -430,7 +431,7 @@ func (q *Queries) GetResourceGroupRow(ctx context.Context, name string) (*Resour
 
 func (q *Queries) ListResourceGroups(ctx context.Context) ([]ResourceGroupRow, error) {
 	rows, err := q.pool.Query(ctx,
-		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production,
+		`SELECT rg.id, rg.group_id, s.name, rg.name, rg.production, rg.disable,
 		        COALESCE(rg.support_center,''), COALESCE(rg.group_description,''),
 		        rg.extra, rg.id_explicit
 		 FROM resource_groups rg JOIN sites s ON s.id = rg.site_id
@@ -442,7 +443,7 @@ func (q *Queries) ListResourceGroups(ctx context.Context) ([]ResourceGroupRow, e
 	var out []ResourceGroupRow
 	for rows.Next() {
 		var r ResourceGroupRow
-		if err := rows.Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production,
+		if err := rows.Scan(&r.ID, &r.GroupID, &r.SiteName, &r.Name, &r.Production, &r.Disable,
 			&r.SupportCenter, &r.GroupDescription, &r.Extra, &r.IDExplicit); err != nil {
 			return nil, err
 		}
