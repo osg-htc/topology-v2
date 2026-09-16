@@ -836,3 +836,90 @@ func TestCreateAndApplyResourceProposal_PreservesDisableWhenFormOmitsIt(t *testi
 		t.Fatalf("Disable = %v, want true (preserved from before the edit) -- an editor with no Disable UI silently cleared it", row.Disable)
 	}
 }
+
+// TestCreateAndApplyProjectProposal_PreservesExtraWhenFormOmitsIt is the
+// end-to-end regression test for a real, silent data-loss bug: the project
+// edit form has no UI for fields like ResourceAllocations (they live only in
+// Extra, a catch-all with no dedicated struct field on projectProposal
+// before this fix), and applyProjectProposal built its update row without
+// ever setting Extra -- so UpdateProjectFields overwrote the column with
+// NULL on every single edit, even one that only fixed a typo in
+// Description. Confirmed against real data: 5 of 1556 real projects
+// currently carry ResourceAllocations, and any edit to one of them would
+// have silently destroyed it.
+func TestCreateAndApplyProjectProposal_PreservesExtraWhenFormOmitsIt(t *testing.T) {
+	dbURL := os.Getenv("TOPOLOGY_TEST_DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("set TOPOLOGY_TEST_DATABASE_URL to run this test")
+	}
+	ctx := context.Background()
+	_, q := testsupport.SetupSchema(t, dbURL)
+	h := &Handler{queries: q}
+
+	actorID, err := q.CreateUser(ctx, db.CreateUserParams{DisplayName: "regtest-project-extra-actor", Status: "active", IsProvisioned: true})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	extra, err := json.Marshal(map[string]any{
+		"ResourceAllocations": map[string]any{
+			"Regtest Allocation": map[string]any{
+				"Type": "Institutional Allocation", "SubmitResources": []string{"regtest-rg"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal fixture Extra: %v", err)
+	}
+	if err := q.UpsertProject(ctx, db.ProjectRow{
+		Name: "regtest-extra-project", ProjectID: "900000400", Description: "before edit",
+		Organization: "Regtest Org", Extra: extra,
+	}); err != nil {
+		t.Fatalf("UpsertProject: %v", err)
+	}
+
+	// Submit an edit through the same path the real (ResourceAllocations-less)
+	// project edit form uses: a partial payload that never mentions extra at all.
+	createBody := map[string]any{
+		"entity_kind": models.KindProject, "operation": models.OpUpdate,
+		"target_name": "regtest-extra-project", "submit": true,
+		"proposed_state": map[string]any{
+			"name": "regtest-extra-project", "description": "after edit",
+		},
+	}
+	w := httptest.NewRecorder()
+	h.CreateProposal(w, requestWithBody(t, actorID, createBody))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateProposal: status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding CreateProposal response: %v", err)
+	}
+
+	w = httptest.NewRecorder()
+	h.ApproveProposal(w, withRouteParam(asUser(actorID, models.RoleAdministrator), "id", created.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("ApproveProposal: status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	row, err := q.GetProjectByName(ctx, "regtest-extra-project")
+	if err != nil {
+		t.Fatalf("GetProjectByName: %v", err)
+	}
+	if row.Description != "after edit" {
+		t.Fatalf("Description = %q, want %q (the edit that was actually submitted)", row.Description, "after edit")
+	}
+	if len(row.Extra) == 0 {
+		t.Fatalf("Extra is empty -- ResourceAllocations was silently wiped by an editor with no UI for it, the exact bug")
+	}
+	var gotExtra map[string]any
+	if err := json.Unmarshal(row.Extra, &gotExtra); err != nil {
+		t.Fatalf("unmarshaling Extra: %v", err)
+	}
+	if _, ok := gotExtra["ResourceAllocations"]; !ok {
+		t.Fatalf("ResourceAllocations missing from Extra after edit: %v", gotExtra)
+	}
+}
