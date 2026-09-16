@@ -618,8 +618,16 @@ func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *mo
 	if len(pp.Sponsor) == 0 {
 		sponsorJSON = nil
 	}
+	// Mirrors ImportProjects' GenID fallback: a project created through the
+	// app with no literal ID must still resolve to a real, stable id, not an
+	// empty string (see topology.GenID / project_reader.py's
+	// gen_id_from_yaml).
+	id := pp.ID
+	if id == "" {
+		id = strconv.FormatInt(topology.GenID(pp.Name), 10)
+	}
 	row := db.ProjectRow{
-		Name: pp.Name, ProjectID: pp.ID, Description: pp.Description, Department: pp.Department,
+		Name: pp.Name, ProjectID: id, Description: pp.Description, Department: pp.Department,
 		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
 		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
 		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName,

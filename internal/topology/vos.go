@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -210,8 +211,17 @@ func ImportProjects(ctx context.Context, q *db.Queries, dir string) error {
 	}
 	for _, p := range projects {
 		sType, sName := p.SponsorTypeName()
+		// v1 always resolves a project's ID, falling back to the shared
+		// name-hash when the YAML omits it (project_reader.py:
+		// data["ID"] = str(gen_id_from_yaml(data, data["Name"]))) -- v2 never
+		// applied this fallback, so a project with no literal ID rendered
+		// with its <ID> element omitted entirely.
+		id := p.ID
+		if id == "" {
+			id = strconv.FormatInt(GenID(p.Name), 10)
+		}
 		if err := q.UpsertProject(ctx, db.ProjectRow{
-			Name: p.Name, ProjectID: p.ID, Description: p.Description,
+			Name: p.Name, ProjectID: id, Description: p.Description,
 			Department: p.Department, FieldOfScience: p.FieldOfScience,
 			FieldOfScienceID: p.FieldOfScienceID, Organization: p.Organization,
 			PIName: p.PIName, InstitutionID: p.InstitutionID,
