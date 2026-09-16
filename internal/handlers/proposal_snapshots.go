@@ -155,6 +155,7 @@ func (h *Handler) snapshotProjectState(ctx context.Context, targetName string) j
 		Name: row.Name, ID: row.ProjectID, Description: row.Description, Department: row.Department,
 		FieldOfScience: row.FieldOfScience, FieldOfScienceID: row.FieldOfScienceID,
 		Organization: row.Organization, PIName: row.PIName, InstitutionID: row.InstitutionID, Sponsor: sponsor,
+		Extra: fromJSONMap(row.Extra),
 	})
 	if err != nil {
 		return nil

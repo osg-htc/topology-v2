@@ -603,6 +603,11 @@ type projectProposal struct {
 	PIName           string                 `json:"pi_name"`
 	InstitutionID    string                 `json:"institution_id"`
 	Sponsor          map[string]interface{} `json:"sponsor"`
+	// Extra is the catch-all for fields the project edit form has no UI for
+	// (e.g. ResourceAllocations) -- never modeled here individually, only
+	// round-tripped so an edit doesn't silently delete it. See
+	// snapshotProjectState and mergeProposedState.
+	Extra map[string]interface{} `json:"extra,omitempty"`
 }
 
 func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
@@ -626,11 +631,15 @@ func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *mo
 	if id == "" {
 		id = strconv.FormatInt(topology.GenID(pp.Name), 10)
 	}
+	extraJSON, _ := json.Marshal(pp.Extra)
+	if len(pp.Extra) == 0 {
+		extraJSON = nil
+	}
 	row := db.ProjectRow{
 		Name: pp.Name, ProjectID: id, Description: pp.Description, Department: pp.Department,
 		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
 		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
-		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName,
+		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName, Extra: extraJSON,
 	}
 	if p.Operation == models.OpUpdate {
 		return q.UpdateProjectFields(ctx, p.TargetName, row)

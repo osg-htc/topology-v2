@@ -15,6 +15,7 @@
     "organization": { "type": "string" },
     "pi_name": { "type": "string" },
     "institution_id": { "type": "string" },
-    "sponsor": { "type": ["object", "null"] }
+    "sponsor": { "type": ["object", "null"] },
+    "extra": { "type": ["object", "null"] }
   }
 }
