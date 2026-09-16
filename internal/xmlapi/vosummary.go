@@ -156,11 +156,15 @@ func BuildVOSummary(ctx context.Context, q *db.Queries, includePII bool) (*VOSum
 			FieldsOfScience:       fieldsOfScienceXML(m["FieldsOfScience"]),
 			ParentVO:              ParentVOXML{Name: mstr(m, "ParentVO")},
 			ReportingGroups:       reportingGroupsXML(stringList(m["ReportingGroups"]), rgByName),
-			Active:                !v.Disable,
-			Disable:               v.Disable,
-			ContactTypes:          voContactTypesXML(m["Contacts"], includePII),
-			OASIS:                 oasisXML(m["OASIS"]),
-			Credentials:           credentialsXML(m["Credentials"]),
+			// Active is its own independent YAML key, defaulting to true when
+			// omitted (v1: new_vo.update({"Disable": False, "Active": True})
+			// before overlaying the VO's own data) -- never derived from
+			// Disable, which is a separate field.
+			Active:       getBoolDefault(m, "Active", true),
+			Disable:      v.Disable,
+			ContactTypes: voContactTypesXML(m["Contacts"], includePII),
+			OASIS:        oasisXML(m["OASIS"]),
+			Credentials:  credentialsXML(m["Credentials"]),
 		}
 		out.VOs = append(out.VOs, vx)
 	}
