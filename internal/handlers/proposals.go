@@ -726,6 +726,18 @@ type rgProposal struct {
 
 func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
+		// A resource group with live resources must not be deleted out from
+		// under them -- BuildResourceSummary looks its parent up only among
+		// non-deleted rows, so an orphaned resource would otherwise silently
+		// render with a blank/zero-valued ResourceGroup block in
+		// /rgsummary/xml instead of erroring anywhere.
+		names, err := q.ResourceNamesInRG(ctx, p.TargetName)
+		if err != nil {
+			return err
+		}
+		if len(names) > 0 {
+			return fmt.Errorf("cannot delete: %d resource(s) still belong to this group", len(names))
+		}
 		return q.SoftDeleteResourceGroupByName(ctx, p.TargetName, actorID)
 	}
 	var rp rgProposal
@@ -788,6 +800,15 @@ type siteProposal struct {
 
 func (h *Handler) applySiteProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
+		// Same guard as applyResourceGroupProposal: a site with live
+		// resource groups must not be deleted out from under them.
+		names, err := q.RGNamesInSite(ctx, p.TargetName)
+		if err != nil {
+			return err
+		}
+		if len(names) > 0 {
+			return fmt.Errorf("cannot delete: %d resource group(s) still belong to this site", len(names))
+		}
 		return q.SoftDeleteSiteByName(ctx, p.TargetName, actorID)
 	}
 	var sp siteProposal
@@ -835,6 +856,15 @@ type facilityProposal struct {
 
 func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *models.Proposal, actorID string) error {
 	if p.Operation == models.OpDelete {
+		// Same guard as applyResourceGroupProposal: a facility with live
+		// sites must not be deleted out from under them.
+		names, err := q.SiteNamesInFacility(ctx, p.TargetName)
+		if err != nil {
+			return err
+		}
+		if len(names) > 0 {
+			return fmt.Errorf("cannot delete: %d site(s) still belong to this facility", len(names))
+		}
 		return q.SoftDeleteFacilityByName(ctx, p.TargetName, actorID)
 	}
 	var fp facilityProposal
