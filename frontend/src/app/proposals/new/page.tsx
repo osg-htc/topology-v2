@@ -49,6 +49,7 @@ function NewResourceForm() {
   const [hostname, setHostname] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(false);
+  const [disable, setDisable] = useState(false);
   const [aliases, setAliases] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [allowedVOs, setAllowedVOs] = useState<string[]>([]);
@@ -76,6 +77,7 @@ function NewResourceForm() {
     setHostname(editData.fqdn);
     setDescription(editData.description);
     setActive(editData.active);
+    setDisable(editData.disable === true);
     setAliases(editData.fqdn_aliases ?? []);
     setTags(editData.tags ?? []);
     setAllowedVOs(editData.allowed_vos ?? []);
@@ -115,7 +117,7 @@ function NewResourceForm() {
   // for at all (e.g. DN, VOOwnership) is correctly never mentioned here,
   // which is exactly what keeps it safe.
   const buildResource = (): Record<string, unknown> => {
-    const resource: Record<string, unknown> = { FQDN: hostname, Active: active };
+    const resource: Record<string, unknown> = { FQDN: hostname, Active: active, Disable: disable };
     resource.Description = description;
     resource.FQDNAliases = aliases;
     resource.Tags = tags;
@@ -260,6 +262,10 @@ function NewResourceForm() {
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
               Active (accepting requests)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={disable} onChange={(e) => setDisable(e.target.checked)} />
+              Disabled (take this resource out of service; independent of Active)
             </label>
           </div>
         </Card>

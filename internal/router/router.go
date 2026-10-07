@@ -80,6 +80,7 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 		r.Get("/service-names", h.ServiceNamesHandler)
 		r.Get("/vo-names", h.VONamesHandler)
 		r.Get("/tag-names", h.TagsHandler)
+		r.Get("/support-center-names", h.SupportCenterNamesHandler)
 
 		// Auth (public endpoints).
 		r.Route("/auth", func(r chi.Router) {

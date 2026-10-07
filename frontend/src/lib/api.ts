@@ -139,6 +139,7 @@ export const api = {
   serviceNames: () => fetchJSON<string[]>("/service-names"),
   voNames: () => fetchJSON<string[]>("/vo-names"),
   tagNames: () => fetchJSON<string[]>("/tag-names"),
+  supportCenterNames: () => fetchJSON<string[]>("/support-center-names"),
   resourceGroups: (includeInactive = false) =>
     fetchJSON<ResourceGroup[]>(`/resource-groups${includeInactive ? "?include_inactive=1" : ""}`),
   sites: (includeInactive = false) =>
@@ -385,6 +386,7 @@ export interface ResourceDetail {
   site: string;
   facility: string;
   active: boolean;
+  disable?: boolean;
   description: string;
   fqdn: string;
   dn: string;

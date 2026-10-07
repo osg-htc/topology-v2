@@ -113,6 +113,22 @@ func (h *Handler) VONamesHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, names)
 }
 
+// SupportCenterNamesHandler returns the known support center names (for the
+// resource group form's picklist). A resource group's SupportCenter must name
+// one of these -- v1 hard-fails on an unknown name when building rgsummary.
+func (h *Handler) SupportCenterNamesHandler(w http.ResponseWriter, r *http.Request) {
+	scs, err := h.queries.ListAllSupportCenters(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	names := make([]string, 0, len(scs))
+	for _, sc := range scs {
+		names = append(names, sc.Name)
+	}
+	respondJSON(w, http.StatusOK, names)
+}
+
 // TagsHandler returns distinct resource tags in use (for the tags multiselect).
 func (h *Handler) TagsHandler(w http.ResponseWriter, r *http.Request) {
 	tags, err := h.queries.ListDistinctTags(r.Context())
