@@ -2,11 +2,12 @@ package topology
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 )
 
@@ -15,10 +16,10 @@ import (
 func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 	facIDs := map[string]string{}
 	for name, fac := range t.Facilities {
-		topID, explicit := resolveID(fac.ID, name)
+		topID, explicit := ResolveID(fac.ID, name)
 		id, err := q.InsertFacility(ctx, db.FacilityRow{
 			TopologyID: topID, Name: name, InstitutionID: fac.InstitutionID,
-			Extra: mustJSON(fac.Extra), IDExplicit: explicit,
+			Extra: conv.JSONOrNil(fac.Extra), IDExplicit: explicit,
 		})
 		if err != nil {
 			return fmt.Errorf("insert facility %q: %w", name, err)
@@ -29,14 +30,14 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 	siteIDs := map[string]string{}
 	for name, site := range t.Sites {
 		facName := t.SiteFacility[name]
-		topID, explicit := resolveID(site.ID, name)
+		topID, explicit := ResolveID(site.ID, name)
 		id, err := q.InsertSite(ctx, db.SiteRow{
 			TopologyID: topID, FacilityID: facIDs[facName], Name: name,
 			LongName: site.LongName, Description: site.Description,
 			AddressLine1: site.AddressLine1, AddressLine2: site.AddressLine2,
 			City: site.City, State: site.State, Country: site.Country,
 			Zipcode: site.Zipcode, Latitude: site.Latitude, Longitude: site.Longitude,
-			Extra: mustJSON(site.Extra), IDExplicit: explicit,
+			Extra: conv.JSONOrNil(site.Extra), IDExplicit: explicit,
 		})
 		if err != nil {
 			return fmt.Errorf("insert site %q: %w", name, err)
@@ -48,11 +49,11 @@ func Import(ctx context.Context, q *db.Queries, t *Topology) error {
 	resIDs := map[string]int64{} // resource name -> topology_id, for downtime FK resolution below
 	for name, rg := range t.ResourceGroups {
 		siteName := t.RGSite[name]
-		topID, explicit := resolveID(rg.GroupID, name)
+		topID, explicit := ResolveID(rg.GroupID, name)
 		id, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{
 			GroupID: topID, SiteID: siteIDs[siteName], Name: name,
 			Production: rg.Production, Disable: rg.Disable, SupportCenter: rg.SupportCenter,
-			GroupDescription: rg.GroupDescription, Extra: mustJSON(rg.Extra),
+			GroupDescription: rg.GroupDescription, Extra: conv.JSONOrNil(rg.Extra),
 			IDExplicit: explicit,
 		})
 		if err != nil {
@@ -109,13 +110,9 @@ func ImportServices(ctx context.Context, q *db.Queries, services map[string]int6
 // ImportSupportCenters loads support-centers.yaml into the support_centers table.
 func ImportSupportCenters(ctx context.Context, q *db.Queries, scs map[string]SupportCenterYAML) error {
 	for name, sc := range scs {
-		id := GenID(name)
-		if sc.ID != nil {
-			id = *sc.ID
-		}
 		if err := q.UpsertSupportCenterFull(ctx, db.SupportCenterFull{
-			ID: id, Name: name, LongName: sc.LongName, Community: sc.Community,
-			Description: sc.Description, Extra: mustJSON(sc.Extra),
+			ID: IDOrGen(sc.ID, name), Name: name, LongName: sc.LongName, Community: sc.Community,
+			Description: sc.Description, Extra: conv.JSONOrNil(sc.Extra),
 		}); err != nil {
 			return fmt.Errorf("upsert support center %q: %w", name, err)
 		}
@@ -197,7 +194,7 @@ func ImportTree(ctx context.Context, q *db.Queries, root string) error {
 // driven resource creation uses CreateResourceFromProposal instead, which
 // never derives an id from the name -- see that function's doc for why.
 func UpsertResource(ctx context.Context, q *db.Queries, rgID, resName string, res *Resource) (int64, error) {
-	topID, explicit := resolveID(res.ID, resName)
+	topID, explicit := ResolveID(res.ID, resName)
 	if err := insertResourceRow(ctx, q, rgID, resName, res, topID, explicit); err != nil {
 		return 0, err
 	}
@@ -244,8 +241,8 @@ func UpdateResourceFromProposal(ctx context.Context, q *db.Queries, topID int64,
 		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
 		Active: res.Active, Disable: res.Disable, Description: res.Description, FQDN: res.FQDN,
 		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
-		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
-		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
+		AllowedVOs: res.AllowedVOs, VOOwnership: conv.JSONAnyOrNil(res.VOOwnership),
+		WLCGInformation: conv.JSONAnyOrNil(res.WLCGInformation), Extra: conv.JSONOrNil(res.Extra),
 	}); err != nil {
 		return fmt.Errorf("update resource %d: %w", topID, err)
 	}
@@ -264,8 +261,8 @@ func insertResourceRow(ctx context.Context, q *db.Queries, rgID, resName string,
 		TopologyID: topID, ResourceGroupID: rgID, Name: resName,
 		Active: res.Active, Disable: res.Disable, Description: res.Description, FQDN: res.FQDN,
 		DN: res.DN, FQDNAliases: res.FQDNAliases, Tags: res.Tags,
-		AllowedVOs: res.AllowedVOs, VOOwnership: mustJSONAny(res.VOOwnership),
-		WLCGInformation: mustJSONAny(res.WLCGInformation), Extra: mustJSON(res.Extra),
+		AllowedVOs: res.AllowedVOs, VOOwnership: conv.JSONAnyOrNil(res.VOOwnership),
+		WLCGInformation: conv.JSONAnyOrNil(res.WLCGInformation), Extra: conv.JSONOrNil(res.Extra),
 		IDExplicit: explicit,
 	}); err != nil {
 		return fmt.Errorf("insert resource %q: %w", resName, err)
@@ -281,7 +278,7 @@ func insertResourceChildren(ctx context.Context, q *db.Queries, topID int64, res
 	for svcName, svc := range res.Services {
 		if err := q.InsertResourceService(ctx, db.ResourceServiceRow{
 			ResourceID: topID, ServiceName: svcName, Description: svc.Description,
-			Details: mustJSONAny(svcBlob{Details: svc.Details, Extra: svc.Extra}), Ordinal: ord,
+			Details: conv.JSONAnyOrNil(svcBlob{Details: svc.Details, Extra: svc.Extra}), Ordinal: ord,
 		}); err != nil {
 			return fmt.Errorf("insert service %q: %w", svcName, err)
 		}
@@ -331,7 +328,7 @@ func ExportFullToDir(ctx context.Context, q *db.Queries, root string) error {
 			id := s.ID
 			m[s.Name] = SupportCenterYAML{
 				ID: &id, LongName: s.LongName, Community: s.Community, Description: s.Description,
-				Extra: fromJSON(s.Extra),
+				Extra: conv.MapFromJSON(s.Extra),
 			}
 		}
 		if err := writeYAMLFile(filepath.Join(root, "support-centers.yaml"), m); err != nil {
@@ -360,7 +357,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 	for _, f := range facs {
 		t.Facilities[f.Name] = &Facility{
 			Name: f.Name, ID: idPtr(f.TopologyID, f.IDExplicit),
-			InstitutionID: f.InstitutionID, Extra: fromJSON(f.Extra),
+			InstitutionID: f.InstitutionID, Extra: conv.MapFromJSON(f.Extra),
 		}
 	}
 
@@ -373,7 +370,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 			Name: s.Name, ID: idPtr(s.TopologyID, s.IDExplicit), LongName: s.LongName,
 			Description: s.Description, AddressLine1: s.AddressLine1, AddressLine2: s.AddressLine2,
 			City: s.City, State: s.State, Country: s.Country, Zipcode: s.Zipcode,
-			Latitude: s.Latitude, Longitude: s.Longitude, Extra: fromJSON(s.Extra),
+			Latitude: s.Latitude, Longitude: s.Longitude, Extra: conv.MapFromJSON(s.Extra),
 		}
 		t.SiteFacility[s.Name] = s.FacilityName
 	}
@@ -387,7 +384,7 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 		g := &ResourceGroup{
 			Name: rg.Name, GroupID: idPtr(rg.GroupID, rg.IDExplicit), Production: rg.Production, Disable: rg.Disable,
 			SupportCenter: rg.SupportCenter, GroupDescription: rg.GroupDescription,
-			Resources: map[string]*Resource{}, Extra: fromJSON(rg.Extra),
+			Resources: map[string]*Resource{}, Extra: conv.MapFromJSON(rg.Extra),
 		}
 		t.ResourceGroups[rg.Name] = g
 		t.RGSite[rg.Name] = rg.SiteName
@@ -402,8 +399,8 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 		res := &Resource{
 			ID: idPtr(r.TopologyID, r.IDExplicit), Active: r.Active, Disable: r.Disable, Description: r.Description,
 			FQDN: r.FQDN, DN: r.DN, FQDNAliases: r.FQDNAliases, Tags: r.Tags,
-			AllowedVOs: r.AllowedVOs, VOOwnership: fromJSONAny(r.VOOwnership),
-			WLCGInformation: fromJSONAny(r.WLCGInformation), Extra: fromJSON(r.Extra),
+			AllowedVOs: r.AllowedVOs, VOOwnership: conv.AnyFromJSON(r.VOOwnership),
+			WLCGInformation: conv.AnyFromJSON(r.WLCGInformation), Extra: conv.MapFromJSON(r.Extra),
 		}
 		// Services.
 		svcs, err := q.ListResourceServices(ctx, r.TopologyID)
@@ -456,12 +453,30 @@ func Export(ctx context.Context, q *db.Queries) (*Topology, error) {
 
 // ---- helpers ----
 
-// resolveID returns the topology id and whether it was explicit in the source.
-func resolveID(id *int64, name string) (int64, bool) {
+// ResolveID returns an entity's id and whether it was explicit in the source:
+// an explicit id wins, otherwise it is GenID(name) -- v1's own deterministic
+// name-hash convention. This is THE rule for it; use ResolveID/IDOrGen rather
+// than writing the fallback out again.
+func ResolveID(id *int64, name string) (int64, bool) {
 	if id != nil {
 		return *id, true
 	}
 	return GenID(name), false
+}
+
+// IDOrGen is ResolveID without the "was it explicit" flag.
+func IDOrGen(id *int64, name string) int64 {
+	v, _ := ResolveID(id, name)
+	return v
+}
+
+// ProjectIDOrGen is the same rule for a project, whose ID is a string in YAML
+// (project_reader.py: data["ID"] = str(gen_id_from_yaml(data, data["Name"]))).
+func ProjectIDOrGen(id, name string) string {
+	if id != "" {
+		return id
+	}
+	return strconv.FormatInt(GenID(name), 10)
 }
 
 func idPtr(id int64, explicit bool) *int64 {
@@ -470,48 +485,6 @@ func idPtr(id int64, explicit bool) *int64 {
 	}
 	v := id
 	return &v
-}
-
-func mustJSON(v map[string]interface{}) []byte {
-	if len(v) == 0 {
-		return nil
-	}
-	return mustJSONAny(v)
-}
-
-// mustJSONAny marshals any value (map, scalar, slice) to JSON, or nil if empty.
-func mustJSONAny(v interface{}) []byte {
-	if v == nil {
-		return nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	return b
-}
-
-func fromJSON(b []byte) map[string]interface{} {
-	if len(b) == 0 {
-		return nil
-	}
-	var v map[string]interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil
-	}
-	return v
-}
-
-// fromJSONAny unmarshals JSON into an arbitrary value (map, scalar, slice).
-func fromJSONAny(b []byte) interface{} {
-	if len(b) == 0 {
-		return nil
-	}
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil
-	}
-	return v
 }
 
 // svcBlob is the JSON storage form of a Service (Description is stored in its
@@ -527,11 +500,10 @@ func ServiceFromBlob(desc string, blob []byte) *Service {
 	if len(blob) == 0 {
 		return svc
 	}
-	var b svcBlob
-	if err := json.Unmarshal(blob, &b); err != nil {
-		return svc
-	}
-	svc.Details = b.Details
-	svc.Extra = b.Extra
+	// Decoded via conv, not a plain json.Unmarshal, so integers in Details/Extra
+	// stay integers when the service is written back out as YAML.
+	m := conv.MapFromJSON(blob)
+	svc.Details = m["details"]
+	svc.Extra, _ = m["extra"].(map[string]interface{})
 	return svc
 }

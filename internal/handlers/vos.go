@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/topology"
@@ -96,11 +97,7 @@ func (h *Handler) applyVOProposal(ctx context.Context, q *db.Queries, p *models.
 			return err
 		}
 		id, disable := topology.ParseVOHead(raw)
-		voID := topology.GenID(vp.Name)
-		if id != nil {
-			voID = *id
-		}
-		return q.UpdateVOFields(ctx, p.TargetName, voID, disable, raw)
+		return q.UpdateVOFields(ctx, p.TargetName, topology.IDOrGen(id, vp.Name), disable, raw)
 	}
 
 	// Create.
@@ -115,11 +112,7 @@ func (h *Handler) applyVOProposal(ctx context.Context, q *db.Queries, p *models.
 		return err
 	}
 	id, disable := topology.ParseVOHead(raw)
-	voID := topology.GenID(vp.Name)
-	if id != nil {
-		voID = *id
-	}
-	return q.InsertVO(ctx, vp.Name, voID, disable, raw)
+	return q.InsertVO(ctx, vp.Name, topology.IDOrGen(id, vp.Name), disable, raw)
 }
 
 // checkVODoc validates a VO document before it is written: a ParentVO must
@@ -317,14 +310,6 @@ func (h *Handler) snapshotVOState(ctx context.Context, targetName string) json.R
 
 // ---- read API ----------------------------------------------------------
 
-// voBool reads a boolean key, with the default when it is absent.
-func voBool(doc map[string]interface{}, key string, def bool) bool {
-	if b, ok := doc[key].(bool); ok {
-		return b
-	}
-	return def
-}
-
 type voListRow struct {
 	Name            string `json:"name"`
 	ID              int64  `json:"id"`
@@ -352,7 +337,7 @@ func (h *Handler) ListVOsHandler(w http.ResponseWriter, r *http.Request) {
 			doc = map[string]interface{}{}
 		}
 		row := voListRow{
-			Name: v.Name, ID: v.VOID, Active: voBool(doc, "Active", true), Disable: v.Disable,
+			Name: v.Name, ID: v.VOID, Active: conv.MapBool(doc, "Active", true), Disable: v.Disable,
 		}
 		row.LongName, _ = doc["LongName"].(string)
 		row.Community, _ = doc["Community"].(string)

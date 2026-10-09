@@ -9,6 +9,7 @@ for how to run it.
 - `cmd/server` — entrypoint (also `migrate` subcommand).
 - `internal/config` — env config + master-key bootstrap.
 - `internal/crypto` — envelope encryption (HKDF from one master key).
+- `internal/conv` — shared conversions between loosely-typed YAML/JSON values and typed ones (JSON decode/encode for storage, bool defaults). Look here before writing one.
 - `internal/db` — pgx pool, hand-written `Queries` (no ORM), goose migrations
   (`internal/db/migrations/*.sql`, embedded + auto-run at boot).
 - `internal/topology` — YAML data model + reader/writer + importer/exporter
@@ -31,6 +32,31 @@ for how to run it.
 - DB-backed tests are gated on `TOPOLOGY_TEST_DATABASE_URL` and isolate
   themselves with `internal/testsupport.SetupSchema` (unique per-test schema),
   so `go test ./...` is safe to run concurrently.
+
+## Look for an existing helper first
+
+Before writing any small utility — decoding stored JSON/YAML, "map to JSON or
+nil", "bool with a default", "explicit ID else the name hash", building a
+list-of-names query — **search the repo for one** (`grep -rn "func .*Keyword"
+internal`). If it exists, use it; if a near-copy exists, merge the two rather
+than adding a third.
+
+Known homes:
+
+- `internal/conv` — `MapFromJSON` / `AnyFromJSON` / `DecodeJSONObject`,
+  `JSONOrNil` / `JSONAnyOrNil`, `BoolOr` (for `*bool`), `MapBool` (for a decoded
+  map). Add new conversions of this kind here, not as a private copy.
+- `topology.ResolveID` / `IDOrGen` / `ProjectIDOrGen` — the one place the rule
+  "an explicit id wins, otherwise `GenID(name)`" lives.
+- `db.Queries.childNames` — the "list live names under a parent" query helper
+  behind the delete guards.
+
+Why this is a rule: these used to exist as several private copies that drifted
+apart. One decoded numbers as `float64`, another as `int`, one treated a nil map
+as "no value" and another stored the JSON text `null`. The `float64` copy wrote
+`KSI2KMax: 15600000` back out of a backup as `1.56e+07`, and a YAML 1.1 reader
+(v1's PyYAML) reads `2e+06` as a *string*. A fix applied to one copy never
+reached the others.
 
 ## Keeping goose and proposal JSON Schemas in sync
 

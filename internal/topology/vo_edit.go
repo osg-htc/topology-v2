@@ -8,6 +8,8 @@ import (
 	"sort"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/bbockelm/topology-v2/internal/conv"
 )
 
 // A VO is stored as its raw YAML (see VODoc). Editing one through the app means
@@ -40,45 +42,11 @@ func VODocFromRaw(raw []byte) (map[string]interface{}, error) {
 	return doc, nil
 }
 
-// NormalizeVODoc decodes a JSON object so integers stay integers (a plain
-// json.Unmarshal turns every number into float64, and yaml would then write a
-// large VO ID like 1000000000 as 1e+09).
+// NormalizeVODoc decodes a JSON object into a VO document. Integers stay
+// integers (see conv.DecodeJSONObject): a plain json.Unmarshal would turn a VO
+// ID like 1000000000 into a float64, which yaml then writes as 1e+09.
 func NormalizeVODoc(raw []byte) (map[string]interface{}, error) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	var doc map[string]interface{}
-	if err := dec.Decode(&doc); err != nil {
-		return nil, err
-	}
-	if doc == nil {
-		return nil, errors.New("VO document must be an object")
-	}
-	return normalizeNumbers(doc).(map[string]interface{}), nil
-}
-
-func normalizeNumbers(v interface{}) interface{} {
-	switch t := v.(type) {
-	case map[string]interface{}:
-		for k, x := range t {
-			t[k] = normalizeNumbers(x)
-		}
-		return t
-	case []interface{}:
-		for i, x := range t {
-			t[i] = normalizeNumbers(x)
-		}
-		return t
-	case json.Number:
-		if i, err := t.Int64(); err == nil {
-			return i
-		}
-		if f, err := t.Float64(); err == nil {
-			return f
-		}
-		return t.String()
-	default:
-		return v
-	}
+	return conv.DecodeJSONObject(raw)
 }
 
 // jsonEqual compares two decoded values by their canonical JSON form (map keys

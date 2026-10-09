@@ -7,6 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 )
 
@@ -146,7 +147,7 @@ func BuildVOSummary(ctx context.Context, q *db.Queries, includePII bool) (*VOSum
 			ID:                    &id,
 			Name:                  v.Name,
 			LongName:              mstr(m, "LongName"),
-			CertificateOnly:       mbool(m, "CertificateOnly"),
+			CertificateOnly:       conv.MapBool(m, "CertificateOnly", false),
 			PrimaryURL:            mstr(m, "PrimaryURL"),
 			MembershipServicesURL: mstr(m, "MembershipServicesURL"),
 			PurposeURL:            mstr(m, "PurposeURL"),
@@ -160,7 +161,7 @@ func BuildVOSummary(ctx context.Context, q *db.Queries, includePII bool) (*VOSum
 			// omitted (v1: new_vo.update({"Disable": False, "Active": True})
 			// before overlaying the VO's own data) -- never derived from
 			// Disable, which is a separate field.
-			Active:       getBoolDefault(m, "Active", true),
+			Active:       conv.MapBool(m, "Active", true),
 			Disable:      v.Disable,
 			ContactTypes: voContactTypesXML(m["Contacts"], includePII),
 			OASIS:        oasisXML(m["OASIS"]),
@@ -276,7 +277,7 @@ func oasisXML(v interface{}) *OASISXML {
 	if !ok {
 		return nil
 	}
-	x := &OASISXML{UseOASIS: getBool(m, "UseOASIS")}
+	x := &OASISXML{UseOASIS: conv.MapBool(m, "UseOASIS", false)}
 	for _, item := range asSlice(m["Managers"]) {
 		mm, ok := item.(map[string]interface{})
 		if !ok {
@@ -322,7 +323,6 @@ func credentialsXML(v interface{}) *CredentialsXML {
 // ---- small map helpers ----
 
 func mstr(m map[string]interface{}, key string) string { return getStr(m, key) }
-func mbool(m map[string]interface{}, key string) bool  { return getBool(m, key) }
 
 func asSlice(v interface{}) []interface{} {
 	if s, ok := v.([]interface{}); ok {
