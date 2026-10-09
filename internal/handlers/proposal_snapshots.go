@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/topology"
 )
@@ -53,8 +54,8 @@ func (h *Handler) snapshotResourceState(ctx context.Context, targetName string) 
 		// submission (a nil slice here isn't "cleared", it's simply "empty",
 		// same as what the edit form itself always sends).
 		FQDNAliases: emptySlice(row.FQDNAliases), Tags: emptySlice(row.Tags), AllowedVOs: emptySlice(row.AllowedVOs),
-		VOOwnership: fromJSONAny(row.VOOwnership), WLCGInformation: fromJSONAny(row.WLCGInformation),
-		Extra: fromJSONMap(row.Extra),
+		VOOwnership: conv.AnyFromJSON(row.VOOwnership), WLCGInformation: conv.AnyFromJSON(row.WLCGInformation),
+		Extra: conv.MapFromJSON(row.Extra),
 	}
 	// Deliberately no ID: a proposal's own Resource payload never carries
 	// one, so leaving it out keeps the two columns comparable field-for-field.
@@ -159,34 +160,12 @@ func (h *Handler) snapshotProjectState(ctx context.Context, targetName string) j
 		Name: row.Name, ID: row.ProjectID, Description: row.Description, Department: row.Department,
 		FieldOfScience: row.FieldOfScience, FieldOfScienceID: row.FieldOfScienceID,
 		Organization: row.Organization, PIName: row.PIName, InstitutionID: row.InstitutionID, Sponsor: sponsor,
-		Extra: fromJSONMap(row.Extra),
+		Extra: conv.MapFromJSON(row.Extra),
 	})
 	if err != nil {
 		return nil
 	}
 	return b
-}
-
-func fromJSONMap(b []byte) map[string]interface{} {
-	if len(b) == 0 {
-		return nil
-	}
-	var v map[string]interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil
-	}
-	return v
-}
-
-func fromJSONAny(b []byte) interface{} {
-	if len(b) == 0 {
-		return nil
-	}
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil
-	}
-	return v
 }
 
 // mergeShallow merges incoming onto current: every key incoming actually
@@ -231,8 +210,8 @@ func mergeShallow(current, incoming map[string]interface{}) map[string]interface
 // stopped at the outer envelope would replace it wholesale and never reach
 // the fields it's meant to protect -- merge one level deeper for this kind.
 func mergeProposedState(entityKind string, base, incoming json.RawMessage) json.RawMessage {
-	baseMap := fromJSONMap(base)
-	incomingMap := fromJSONMap(incoming)
+	baseMap := conv.MapFromJSON(base)
+	incomingMap := conv.MapFromJSON(incoming)
 	if baseMap == nil || incomingMap == nil {
 		return incoming
 	}

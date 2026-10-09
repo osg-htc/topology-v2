@@ -31,21 +31,6 @@ func toInt(v interface{}) int {
 	}
 }
 
-// getBool reads a boolean from a JSON-decoded map (default false).
-func getBool(m map[string]interface{}, key string) bool {
-	return getBoolDefault(m, key, false)
-}
-
-// getBoolDefault reads a boolean from a JSON-decoded map, falling back to def
-// when the key is absent or not a bool -- e.g. VO.Active, which v1 defaults
-// to true when omitted, unlike most other boolean fields.
-func getBoolDefault(m map[string]interface{}, key string, def bool) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return def
-}
-
 // getStr reads a string from a JSON-decoded map. Numbers are stringified so a
 // value stored as a number still serializes as the XSD's string type.
 func getStr(m map[string]interface{}, key string) string {

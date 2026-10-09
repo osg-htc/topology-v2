@@ -283,10 +283,10 @@ func TestDecomposeResources_EmptyCollectionsAreNeverNull(t *testing.T) {
 
 func TestResolveResourceID(t *testing.T) {
 	explicit := int64(42)
-	if got := resolveResourceID(&explicit, "whatever"); got != 42 {
+	if got := topology.IDOrGen(&explicit, "whatever"); got != 42 {
 		t.Errorf("explicit ID: got %d, want 42", got)
 	}
-	if got, want := resolveResourceID(nil, "some-resource"), topology.GenID("some-resource"); got != want {
+	if got, want := topology.IDOrGen(nil, "some-resource"), topology.GenID("some-resource"); got != want {
 		t.Errorf("nil ID: got %d, want GenID fallback %d", got, want)
 	}
 }

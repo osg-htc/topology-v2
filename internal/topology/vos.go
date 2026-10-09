@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 )
 
@@ -53,11 +53,7 @@ func ReadVOs(dir string) ([]VODoc, error) {
 		name := strings.TrimSuffix(e.Name(), ".yaml")
 		var head voHead
 		_ = yaml.Unmarshal(raw, &head)
-		id := GenID(name)
-		if head.ID != nil {
-			id = *head.ID
-		}
-		out = append(out, VODoc{Name: name, VOID: id, Disable: head.Disable, Raw: raw})
+		out = append(out, VODoc{Name: name, VOID: IDOrGen(head.ID, name), Disable: head.Disable, Raw: raw})
 	}
 	return out, nil
 }
@@ -216,17 +212,13 @@ func ImportProjects(ctx context.Context, q *db.Queries, dir string) error {
 		// data["ID"] = str(gen_id_from_yaml(data, data["Name"]))) -- v2 never
 		// applied this fallback, so a project with no literal ID rendered
 		// with its <ID> element omitted entirely.
-		id := p.ID
-		if id == "" {
-			id = strconv.FormatInt(GenID(p.Name), 10)
-		}
 		if err := q.UpsertProject(ctx, db.ProjectRow{
-			Name: p.Name, ProjectID: id, Description: p.Description,
+			Name: p.Name, ProjectID: ProjectIDOrGen(p.ID, p.Name), Description: p.Description,
 			Department: p.Department, FieldOfScience: p.FieldOfScience,
 			FieldOfScienceID: p.FieldOfScienceID, Organization: p.Organization,
 			PIName: p.PIName, InstitutionID: p.InstitutionID,
-			Sponsor: mustJSONAny(p.Sponsor), SponsorType: sType, SponsorName: sName,
-			Extra: mustJSON(p.Extra),
+			Sponsor: conv.JSONOrNil(p.Sponsor), SponsorType: sType, SponsorName: sName,
+			Extra: conv.JSONOrNil(p.Extra),
 		}); err != nil {
 			return fmt.Errorf("import project %q: %w", p.Name, err)
 		}
@@ -309,23 +301,11 @@ func ExportProjectsToDir(ctx context.Context, q *db.Queries, dir string) error {
 			ID: r.ProjectID, Description: r.Description, Department: r.Department,
 			FieldOfScience: r.FieldOfScience, FieldOfScienceID: r.FieldOfScienceID,
 			Organization: r.Organization, PIName: r.PIName, InstitutionID: r.InstitutionID,
-			Sponsor: fromJSONMap(r.Sponsor), Extra: fromJSONMap(r.Extra),
+			Sponsor: conv.MapFromJSON(r.Sponsor), Extra: conv.MapFromJSON(r.Extra),
 		}
 		if err := writeYAMLFile(filepath.Join(dir, r.Name+".yaml"), &p); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// fromJSONMap unmarshals a JSON object into a map, or nil.
-func fromJSONMap(b []byte) map[string]interface{} {
-	if len(b) == 0 {
-		return nil
-	}
-	var m map[string]interface{}
-	if err := yaml.Unmarshal(b, &m); err != nil {
-		return nil
-	}
-	return m
 }

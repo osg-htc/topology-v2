@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/crypto"
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/topology"
@@ -287,7 +288,7 @@ func BuildResourceSummary(ctx context.Context, q *db.Queries, enc *crypto.Encryp
 		}
 		// v1 default: an omitted Production is false (ITB), not true -- see
 		// is_true(yaml_data.get("Production", "")) in topology.py.
-		production := rg.Production != nil && *rg.Production
+		production := conv.BoolOr(rg.Production, false)
 		if (production && !f.GridTypeProd && f.gridTypeSet()) ||
 			(!production && !f.GridTypeITB && f.gridTypeSet()) {
 			continue
@@ -542,7 +543,7 @@ func wlcgXML(v []byte) WLCGXML {
 	if len(m) == 0 {
 		return WLCGXML{}
 	}
-	b := func(key string) *bool { v := getBool(m, key); return &v }
+	b := func(key string) *bool { v := conv.MapBool(m, key, false); return &v }
 	s := func(key string) *string { v := getStr(m, key); return &v }
 	f := func(key string) *float64 { v := getFloat(m, key); return &v }
 

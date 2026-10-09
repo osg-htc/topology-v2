@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/proposalschema"
@@ -623,27 +624,15 @@ func (h *Handler) applyProjectProposal(ctx context.Context, q *db.Queries, p *mo
 		return err
 	}
 	sType, sName := sponsorTypeName(pp.Sponsor)
-	sponsorJSON, _ := json.Marshal(pp.Sponsor)
-	if len(pp.Sponsor) == 0 {
-		sponsorJSON = nil
-	}
 	// Mirrors ImportProjects' GenID fallback: a project created through the
 	// app with no literal ID must still resolve to a real, stable id, not an
 	// empty string (see topology.GenID / project_reader.py's
 	// gen_id_from_yaml).
-	id := pp.ID
-	if id == "" {
-		id = strconv.FormatInt(topology.GenID(pp.Name), 10)
-	}
-	extraJSON, _ := json.Marshal(pp.Extra)
-	if len(pp.Extra) == 0 {
-		extraJSON = nil
-	}
 	row := db.ProjectRow{
-		Name: pp.Name, ProjectID: id, Description: pp.Description, Department: pp.Department,
+		Name: pp.Name, ProjectID: topology.ProjectIDOrGen(pp.ID, pp.Name), Description: pp.Description, Department: pp.Department,
 		FieldOfScience: pp.FieldOfScience, FieldOfScienceID: pp.FieldOfScienceID,
 		Organization: pp.Organization, PIName: pp.PIName, InstitutionID: pp.InstitutionID,
-		Sponsor: sponsorJSON, SponsorType: sType, SponsorName: sName, Extra: extraJSON,
+		Sponsor: conv.JSONOrNil(pp.Sponsor), SponsorType: sType, SponsorName: sName, Extra: conv.JSONOrNil(pp.Extra),
 	}
 	if p.Operation == models.OpUpdate {
 		return q.UpdateProjectFields(ctx, p.TargetName, row)
@@ -770,14 +759,8 @@ func (h *Handler) applyResourceGroupProposal(ctx context.Context, q *db.Queries,
 			return err
 		}
 	} else {
-		prod := true
-		if rp.Production != nil {
-			prod = *rp.Production
-		}
-		disable := false
-		if rp.Disable != nil {
-			disable = *rp.Disable
-		}
+		prod := conv.BoolOr(rp.Production, true)
+		disable := conv.BoolOr(rp.Disable, false)
 		if _, err := q.InsertResourceGroup(ctx, db.ResourceGroupRow{
 			GroupID: topology.GenID(rp.Name), SiteID: siteID, Name: rp.Name,
 			Production: &prod, Disable: &disable, SupportCenter: rp.SupportCenter, GroupDescription: rp.GroupDescription,

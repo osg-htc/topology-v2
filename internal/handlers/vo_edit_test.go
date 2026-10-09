@@ -370,7 +370,7 @@ func TestVOProposal_NoOpEditLeavesEveryRealVOUntouched(t *testing.T) {
 	}
 	for _, v := range vos {
 		after := e.doc(t, v.Name)
-		if a, b := mustJSON(t, after), mustJSON(t, beforeDocs[v.Name]); a != b {
+		if a, b := canonicalJSON(t, after), canonicalJSON(t, beforeDocs[v.Name]); a != b {
 			t.Errorf("%s: document changed by a no-op edit:\n before %s\n after  %s", v.Name, b, a)
 		}
 		row, _ := e.q.GetVO(e.ctx, v.Name)
@@ -388,7 +388,7 @@ func TestVOProposal_NoOpEditLeavesEveryRealVOUntouched(t *testing.T) {
 	t.Logf("%d real VOs: no-op edits left every document and the vosummary feed unchanged", len(vos))
 }
 
-func mustJSON(t *testing.T, v interface{}) string {
+func canonicalJSON(t *testing.T, v interface{}) string {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {

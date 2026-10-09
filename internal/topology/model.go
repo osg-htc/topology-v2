@@ -10,6 +10,8 @@ import (
 	"encoding/hex"
 	"math/big"
 	"strings"
+
+	"github.com/bbockelm/topology-v2/internal/conv"
 )
 
 // GenID reproduces the legacy id generator used when a YAML entity omits its ID:
@@ -37,7 +39,7 @@ func ContactIDFromEmail(email string) string {
 // `self.data.get("Active", True)`. Every reader of a resource's Active field
 // must go through this rather than treating nil as false.
 func ResourceActive(active *bool) bool {
-	return active == nil || *active
+	return conv.BoolOr(active, true)
 }
 
 // ResourceDisabled reports whether a resource is disabled. Disable is an
@@ -46,7 +48,7 @@ func ResourceActive(active *bool) bool {
 // derived as !Active; an omitted Disable defaults to false, matching v1's
 // `self.data.get("Disable", False)`.
 func ResourceDisabled(disable *bool) bool {
-	return disable != nil && *disable
+	return conv.BoolOr(disable, false)
 }
 
 // Facility is FACILITY.yaml. The facility name is the directory name. ID is a

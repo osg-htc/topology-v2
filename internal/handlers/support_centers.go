@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bbockelm/topology-v2/internal/conv"
 	"github.com/bbockelm/topology-v2/internal/db"
 	"github.com/bbockelm/topology-v2/internal/models"
 	"github.com/bbockelm/topology-v2/internal/topology"
@@ -52,7 +53,7 @@ func (h *Handler) applySupportCenterProposal(ctx context.Context, q *db.Queries,
 	}
 	row := db.SupportCenterFull{
 		Name: sp.Name, LongName: sp.LongName, Community: sp.Community,
-		Description: sp.Description, Extra: marshalExtra(sp.Extra),
+		Description: sp.Description, Extra: conv.JSONOrNil(sp.Extra),
 	}
 	if p.Operation == models.OpUpdate {
 		if err := q.UpdateSupportCenterFields(ctx, p.TargetName, row); err != nil {
@@ -76,17 +77,6 @@ func (h *Handler) applySupportCenterProposal(ctx context.Context, q *db.Queries,
 	return q.InsertSupportCenter(ctx, row)
 }
 
-func marshalExtra(m map[string]interface{}) []byte {
-	if len(m) == 0 {
-		return nil
-	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return nil
-	}
-	return b
-}
-
 func (h *Handler) snapshotSupportCenterState(ctx context.Context, targetName string) json.RawMessage {
 	row, err := h.queries.GetSupportCenter(ctx, targetName)
 	if err != nil {
@@ -94,7 +84,7 @@ func (h *Handler) snapshotSupportCenterState(ctx context.Context, targetName str
 	}
 	b, err := json.Marshal(supportCenterProposal{
 		Name: row.Name, LongName: row.LongName, Community: row.Community,
-		Description: row.Description, Extra: fromJSONMap(row.Extra),
+		Description: row.Description, Extra: conv.MapFromJSON(row.Extra),
 	})
 	if err != nil {
 		return nil
@@ -135,7 +125,7 @@ func (h *Handler) SupportCenterDetailHandler(w http.ResponseWriter, r *http.Requ
 		"community": sc.Community, "description": sc.Description,
 		"resource_groups": rgs,
 	}
-	if extra := fromJSONMap(sc.Extra); extra != nil {
+	if extra := conv.MapFromJSON(sc.Extra); extra != nil {
 		out["extra"] = extra
 	}
 	respondJSON(w, http.StatusOK, out)

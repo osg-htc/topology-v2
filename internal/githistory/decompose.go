@@ -279,7 +279,7 @@ func decomposeResources(oldRGName, newRGName string, oldRG, newRG *topology.Reso
 			}
 			changes = append(changes, entityChange{
 				Kind: models.KindResource, OldName: name, Operation: models.OpDelete,
-				Before: before, ResourceTopologyID: resolveResourceID(oldRes.ID, name),
+				Before: before, ResourceTopologyID: topology.IDOrGen(oldRes.ID, name),
 			})
 			continue
 		}
@@ -296,7 +296,7 @@ func decomposeResources(oldRGName, newRGName string, oldRG, newRG *topology.Reso
 		}
 		changes = append(changes, entityChange{
 			Kind: models.KindResource, OldName: name, NewName: name, Operation: models.OpUpdate,
-			Before: before, After: after, ResourceTopologyID: resolveResourceID(newRes.ID, name),
+			Before: before, After: after, ResourceTopologyID: topology.IDOrGen(newRes.ID, name),
 		})
 	}
 	for name, newRes := range new {
@@ -309,22 +309,10 @@ func decomposeResources(oldRGName, newRGName string, oldRG, newRG *topology.Reso
 		}
 		changes = append(changes, entityChange{
 			Kind: models.KindResource, NewName: name, Operation: models.OpCreate,
-			After: after, ResourceTopologyID: resolveResourceID(newRes.ID, name),
+			After: after, ResourceTopologyID: topology.IDOrGen(newRes.ID, name),
 		})
 	}
 	return changes, nil
-}
-
-// resolveResourceID mirrors topology.UpsertResource's own nil-ID fallback
-// (internal/topology/persist.go) exactly, so a historical resource change
-// always lands on the same topology_id the live snapshot importer assigned
-// that resource: an explicit YAML ID wins; otherwise it's GenID(name), v1's
-// own deterministic name-hash convention.
-func resolveResourceID(id *int64, name string) int64 {
-	if id != nil {
-		return *id
-	}
-	return topology.GenID(name)
 }
 
 // oneChange is a small helper so each decompose function's marshal-then-
