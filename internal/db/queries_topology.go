@@ -131,29 +131,10 @@ func (q *Queries) UpsertService(ctx context.Context, id int64, name string) erro
 	return err
 }
 
-// UpsertSupportCenter inserts or updates a support center by name.
-func (q *Queries) UpsertSupportCenter(ctx context.Context, id int64, name, longName, community, description string) error {
-	_, err := q.pool.Exec(ctx,
-		`INSERT INTO support_centers (id, name, long_name, community, description)
-		 VALUES ($1,$2,$3,$4,$5)
-		 ON CONFLICT (name) DO UPDATE SET id=$1, long_name=$3, community=$4, description=$5`,
-		id, name, nullString(longName), nullString(community), nullString(description))
-	return err
-}
-
 // ServiceIDByName returns the id for a service name, or (0,false) if unknown.
 func (q *Queries) ServiceIDByName(ctx context.Context, name string) (int64, bool) {
 	var id int64
 	if err := q.pool.QueryRow(ctx, `SELECT id FROM services WHERE name = $1`, name).Scan(&id); err != nil {
-		return 0, false
-	}
-	return id, true
-}
-
-// SupportCenterIDByName returns the id for a support center name.
-func (q *Queries) SupportCenterIDByName(ctx context.Context, name string) (int64, bool) {
-	var id int64
-	if err := q.pool.QueryRow(ctx, `SELECT id FROM support_centers WHERE name = $1`, name).Scan(&id); err != nil {
 		return 0, false
 	}
 	return id, true
@@ -174,35 +155,6 @@ func (q *Queries) ListAllServices(ctx context.Context) (map[string]int64, error)
 			return nil, err
 		}
 		out[name] = id
-	}
-	return out, rows.Err()
-}
-
-// SupportCenterFull is a full support-center row (for export).
-type SupportCenterFull struct {
-	ID          int64
-	Name        string
-	LongName    string
-	Community   string
-	Description string
-}
-
-// ListAllSupportCenters returns all support centers.
-func (q *Queries) ListAllSupportCenters(ctx context.Context) ([]SupportCenterFull, error) {
-	rows, err := q.pool.Query(ctx,
-		`SELECT id, name, COALESCE(long_name,''), COALESCE(community,''), COALESCE(description,'')
-		 FROM support_centers ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []SupportCenterFull
-	for rows.Next() {
-		var s SupportCenterFull
-		if err := rows.Scan(&s.ID, &s.Name, &s.LongName, &s.Community, &s.Description); err != nil {
-			return nil, err
-		}
-		out = append(out, s)
 	}
 	return out, rows.Err()
 }

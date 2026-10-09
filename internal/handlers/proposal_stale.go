@@ -64,6 +64,12 @@ func entityUpdatedAt(ctx context.Context, q *db.Queries, entityKind, targetName 
 			return nil, nil
 		}
 		return &row.UpdatedAt, nil
+	case models.KindSupportCenter:
+		row, err := q.GetSupportCenter(ctx, targetName)
+		if err != nil {
+			return nil, nil
+		}
+		return &row.UpdatedAt, nil
 	case models.KindProject:
 		row, err := q.GetProjectByName(ctx, targetName)
 		if err != nil {

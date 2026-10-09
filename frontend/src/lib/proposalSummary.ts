@@ -16,6 +16,7 @@ const KIND_LABEL: Record<string, string> = {
   site: "Site",
   facility: "Facility",
   project: "Project",
+  support_center: "Support center",
   downtime: "Downtime",
   bundle: "Bundle",
 };
@@ -111,6 +112,9 @@ export function proposalSummary(p: ProposalLike): ProposalSummary {
       break;
     case "project":
       if (state.pi_name) changes.push(`PI ${state.pi_name}`);
+      break;
+    case "support_center":
+      if (state.community) changes.push(`community ${state.community}`);
       break;
   }
   if (changes.length === 0) changes.push(`${p.operation} ${kindLabel(p.entity_kind).toLowerCase()}`);

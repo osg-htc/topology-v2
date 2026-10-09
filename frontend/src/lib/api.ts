@@ -163,6 +163,8 @@ export const api = {
   projects: (includeInactive = false) =>
     fetchJSON<Project[]>(`/projects${includeInactive ? "?include_inactive=1" : ""}`),
   project: (name: string) => fetchJSON<ProjectDetail>(`/projects/${encodeURIComponent(name)}`),
+  supportCenters: () => fetchJSON<SupportCenter[]>("/support-centers"),
+  supportCenter: (name: string) => fetchJSON<SupportCenterDetail>(`/support-centers/${encodeURIComponent(name)}`),
   proposals: {
     mine: () => fetchJSON<Proposal[]>("/proposals/mine"),
     pending: () => fetchJSON<Proposal[]>("/proposals/pending"),
@@ -335,6 +337,25 @@ export interface Downtime {
   services: string[];
 }
 
+export interface SupportCenter {
+  name: string;
+  id: number;
+  long_name: string;
+  community: string;
+  description: string;
+  resource_group_count: number;
+}
+export interface SupportCenterDetail {
+  name: string;
+  id: number;
+  long_name: string;
+  community: string;
+  description: string;
+  resource_groups: string[];
+  // Everything support-centers.yaml carries without a modeled field, chiefly
+  // Contacts: {contact type: [{ID, Name}]}. Shown read-only; edits preserve it.
+  extra?: { Contacts?: Record<string, { ID?: string; Name?: string }[]> } & Record<string, unknown>;
+}
 export interface Project {
   name: string;
   project_id: string;

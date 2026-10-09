@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topology.opensciencegrid.org/proposal/support_center/v1",
+  "title": "Support center change proposal (v1)",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "long_name": { "type": "string" },
+    "community": { "type": "string" },
+    "description": { "type": "string" },
+    "extra": { "type": ["object", "null"] }
+  }
+}
