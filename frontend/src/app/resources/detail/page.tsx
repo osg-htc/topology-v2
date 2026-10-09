@@ -32,13 +32,18 @@ function ResourceDetailView() {
         title={r.name}
         description="Resource"
         action={
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              r.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-500"
-            }`}
-          >
-            {r.active ? "active" : "inactive"}
-          </span>
+          <div className="flex gap-2">
+            {r.disable && (
+              <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">disabled</span>
+            )}
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                r.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {r.active ? "active" : "inactive"}
+            </span>
+          </div>
         }
       />
 

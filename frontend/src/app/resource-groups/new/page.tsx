@@ -21,6 +21,7 @@ function NewRGForm() {
   const [busy, setBusy] = useState(false);
 
   const { data: sites } = useQuery({ queryKey: ["sites", false], queryFn: () => api.sites() });
+  const { data: supportCenterNames } = useQuery({ queryKey: ["support-center-names"], queryFn: api.supportCenterNames });
   const { data: editData } = useQuery({
     queryKey: ["rg-detail", editName],
     queryFn: () => api.resourceGroupDetail(editName!),
@@ -96,11 +97,17 @@ function NewRGForm() {
           </div>
           <div>
             <label className={label}>Support center</label>
-            <input
-              className={input}
-              value={supportCenter}
-              onChange={(e) => setSupportCenter(e.target.value)}
-            />
+            <select className={input} value={supportCenter} onChange={(e) => setSupportCenter(e.target.value)}>
+              <option value="">Select a support center…</option>
+              {/* A value already on the group but absent from the registry stays
+                  selectable so merely opening and saving never silently changes it. */}
+              {supportCenter && !(supportCenterNames ?? []).includes(supportCenter) && (
+                <option value={supportCenter}>{supportCenter} (not in registry)</option>
+              )}
+              {(supportCenterNames ?? []).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className={label}>Description</label>

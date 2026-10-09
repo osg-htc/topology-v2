@@ -17,6 +17,7 @@ function NewSiteForm() {
     long_name: "",
     description: "",
     address_line1: "",
+    address_line2: "",
     city: "",
     state: "",
     country: "",
@@ -43,6 +44,7 @@ function NewSiteForm() {
       long_name: editData.long_name,
       description: editData.description,
       address_line1: editData.address_line1,
+      address_line2: editData.address_line2 ?? "",
       city: editData.city,
       state: editData.state,
       country: editData.country,
@@ -63,10 +65,8 @@ function NewSiteForm() {
       // Every field below is always included, even empty -- the backend
       // merges a submission onto the site's current state by field
       // presence, so omitting a key means "leave as-is," not "clear it."
-      // address_line2 has no input on this form and is deliberately never
-      // mentioned here, so it's preserved rather than wiped.
       const proposed: Record<string, unknown> = { name: f.name, facility: f.facility };
-      for (const k of ["long_name", "description", "address_line1", "city", "state", "country", "zipcode"] as const) {
+      for (const k of ["long_name", "description", "address_line1", "address_line2", "city", "state", "country", "zipcode"] as const) {
         proposed[k] = f[k];
       }
       proposed.latitude = f.latitude ? Number(f.latitude) : null;
@@ -113,6 +113,14 @@ function NewSiteForm() {
           <div>
             <label className={label}>Description</label>
             <textarea className={input} rows={2} value={f.description} onChange={set("description")} />
+          </div>
+          <div>
+            <label className={label}>Address line 1</label>
+            <input className={input} value={f.address_line1} onChange={set("address_line1")} />
+          </div>
+          <div>
+            <label className={label}>Address line 2</label>
+            <input className={input} value={f.address_line2} onChange={set("address_line2")} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className={label}>City</label><input className={input} value={f.city} onChange={set("city")} /></div>

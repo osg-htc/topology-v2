@@ -31,6 +31,7 @@ function SiteDetailView() {
             <DetailField label="Country" value={s.country} />
             <DetailField label="Zipcode" value={s.zipcode} />
             <DetailField label="Address" value={s.address_line1} />
+            <DetailField label="Address line 2" value={s.address_line2} />
             <DetailField label="Latitude" value={s.latitude} />
             <DetailField label="Longitude" value={s.longitude} />
           </dl>

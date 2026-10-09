@@ -15,7 +15,7 @@ function ExpandedSite({ name }: { name: string }) {
   return (
     <div className="text-sm">
       <p className="text-gray-600">
-        {[s.long_name, s.address_line1, s.city, s.state, s.country, s.zipcode].filter(Boolean).join(", ") || "—"}
+        {[s.long_name, s.address_line1, s.address_line2, s.city, s.state, s.country, s.zipcode].filter(Boolean).join(", ") || "—"}
       </p>
       <div className="mt-2 text-xs font-semibold uppercase text-gray-500">Resource groups ({s.resource_groups.length})</div>
       <p className="mt-1">
