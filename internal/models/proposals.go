@@ -30,6 +30,7 @@ const (
 	KindFacility      = "facility"
 	KindProject       = "project"
 	KindSupportCenter = "support_center"
+	KindVO            = "vo"
 	KindDowntime      = "downtime"
 	KindBundle        = "bundle"
 )

@@ -163,6 +163,11 @@ export const api = {
   projects: (includeInactive = false) =>
     fetchJSON<Project[]>(`/projects${includeInactive ? "?include_inactive=1" : ""}`),
   project: (name: string) => fetchJSON<ProjectDetail>(`/projects/${encodeURIComponent(name)}`),
+  vos: () => fetchJSON<VOListRow[]>("/vos"),
+  vo: (name: string) => fetchJSON<VODetail>(`/vos/${encodeURIComponent(name)}`),
+  // Full document (contact IDs and all), authenticated -- what the edit form loads.
+  voDocument: (name: string) => fetchJSON<VODetail>(`/vos/${encodeURIComponent(name)}/document`),
+  reportingGroupNames: () => fetchJSON<string[]>("/reporting-group-names"),
   supportCenters: () => fetchJSON<SupportCenter[]>("/support-centers"),
   supportCenter: (name: string) => fetchJSON<SupportCenterDetail>(`/support-centers/${encodeURIComponent(name)}`),
   proposals: {
@@ -337,6 +342,48 @@ export interface Downtime {
   services: string[];
 }
 
+export interface VOListRow {
+  name: string;
+  id: number;
+  long_name: string;
+  community: string;
+  active: boolean;
+  disable: boolean;
+  parent_vo: string;
+  primary_url: string;
+  reporting_group_count: number;
+}
+// A VO's document is its YAML's top-level keys, as-is. Only the keys the form
+// models are typed; everything else (OASIS, Credentials, DataFederations, ...)
+// is carried through untouched.
+export type VODoc = {
+  LongName?: string | null;
+  Community?: string | null;
+  AppDescription?: string | null;
+  CertificateOnly?: boolean | null;
+  Active?: boolean | null;
+  Disable?: boolean | null;
+  PrimaryURL?: string | null;
+  PurposeURL?: string | null;
+  SupportURL?: string | null;
+  MembershipServicesURL?: string | null;
+  Contacts?: Record<string, { ID?: string; Name?: string }[]> | null;
+  FieldsOfScience?: { PrimaryFields?: string[]; SecondaryFields?: string[] } | null;
+  ReportingGroups?: unknown;
+  ParentVO?: { ID?: number; Name?: string } | null;
+  OASIS?: Record<string, unknown> | null;
+  Credentials?: Record<string, unknown> | null;
+  DataFederations?: Record<string, unknown> | null;
+} & Record<string, unknown>;
+export interface VODetail {
+  name: string;
+  id: number;
+  disable: boolean;
+  vo: VODoc;
+  resources: string[];
+  projects: string[];
+  child_vos: string[];
+}
 export interface SupportCenter {
   name: string;
   id: number;
