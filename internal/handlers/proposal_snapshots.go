@@ -27,6 +27,8 @@ func (h *Handler) snapshotEntity(ctx context.Context, entityKind, targetName str
 		return h.snapshotFacilityState(ctx, targetName)
 	case models.KindProject:
 		return h.snapshotProjectState(ctx, targetName)
+	case models.KindSupportCenter:
+		return h.snapshotSupportCenterState(ctx, targetName)
 	default:
 		return nil // downtime, bundle: not yet supported -- unchanged from before
 	}

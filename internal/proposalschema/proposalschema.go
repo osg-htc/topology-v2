@@ -25,6 +25,7 @@ var current = map[string]int{
 	"site":           1,
 	"facility":       1,
 	"project":        1,
+	"support_center": 1,
 	"downtime":       1,
 	"bundle":         1,
 }
@@ -42,6 +43,7 @@ var upgraders = map[string]map[int]func([]byte) ([]byte, error){
 	"site":           {},
 	"facility":       {},
 	"project":        {},
+	"support_center": {},
 	"downtime":       {},
 	"bundle":         {},
 }

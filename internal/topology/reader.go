@@ -102,6 +102,10 @@ type SupportCenterYAML struct {
 	LongName    string `yaml:"LongName,omitempty"`
 	Community   string `yaml:"Community,omitempty"`
 	Description string `yaml:"Description,omitempty"`
+	// Extra catches every other key -- chiefly Contacts, present on 40 of the
+	// 52 real centers -- so import, edit and export are lossless. It used to
+	// be dropped on import, and with it from every backup/restore cycle.
+	Extra map[string]interface{} `yaml:",inline"`
 }
 
 // ReadServices loads topology/services.yaml (a name -> int id map).

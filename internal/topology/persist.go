@@ -113,7 +113,10 @@ func ImportSupportCenters(ctx context.Context, q *db.Queries, scs map[string]Sup
 		if sc.ID != nil {
 			id = *sc.ID
 		}
-		if err := q.UpsertSupportCenter(ctx, id, name, sc.LongName, sc.Community, sc.Description); err != nil {
+		if err := q.UpsertSupportCenterFull(ctx, db.SupportCenterFull{
+			ID: id, Name: name, LongName: sc.LongName, Community: sc.Community,
+			Description: sc.Description, Extra: mustJSON(sc.Extra),
+		}); err != nil {
 			return fmt.Errorf("upsert support center %q: %w", name, err)
 		}
 	}
@@ -328,6 +331,7 @@ func ExportFullToDir(ctx context.Context, q *db.Queries, root string) error {
 			id := s.ID
 			m[s.Name] = SupportCenterYAML{
 				ID: &id, LongName: s.LongName, Community: s.Community, Description: s.Description,
+				Extra: fromJSON(s.Extra),
 			}
 		}
 		if err := writeYAMLFile(filepath.Join(root, "support-centers.yaml"), m); err != nil {

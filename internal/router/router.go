@@ -74,6 +74,8 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 		r.Get("/facilities/{name}", h.FacilityDetailHandler)
 		r.Get("/projects", h.ListProjectsBrowseHandler)
 		r.Get("/projects/{name}", h.GetProjectHandler)
+		r.Get("/support-centers", h.ListSupportCentersHandler)
+		r.Get("/support-centers/{name}", h.SupportCenterDetailHandler)
 		r.Get("/institutions", h.ListInstitutionsHandler)
 		r.Get("/downtimes", h.DowntimesHandler)
 		// Pick-list sources for form dropdowns.

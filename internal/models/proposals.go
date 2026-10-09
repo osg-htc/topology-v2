@@ -29,6 +29,7 @@ const (
 	KindSite          = "site"
 	KindFacility      = "facility"
 	KindProject       = "project"
+	KindSupportCenter = "support_center"
 	KindDowntime      = "downtime"
 	KindBundle        = "bundle"
 )
