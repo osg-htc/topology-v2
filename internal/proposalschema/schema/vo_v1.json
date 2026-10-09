@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://topology.opensciencegrid.org/proposal/vo/v1",
+  "title": "VO change proposal (v1)",
+  "type": "object",
+  "required": ["name", "vo"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "vo": {
+      "type": "object",
+      "description": "The VO's top-level YAML keys. A null value removes the key; an absent key is left as-is.",
+      "properties": {
+        "LongName": { "type": ["string", "null"] },
+        "AppDescription": { "type": ["string", "null"] },
+        "Community": { "type": ["string", "null"] },
+        "CertificateOnly": { "type": ["boolean", "null"] },
+        "Active": { "type": ["boolean", "null"] },
+        "Disable": { "type": ["boolean", "null"] },
+        "PrimaryURL": { "type": ["string", "null"] },
+        "PurposeURL": { "type": ["string", "null"] },
+        "SupportURL": { "type": ["string", "null"] },
+        "MembershipServicesURL": { "type": ["string", "null"] },
+        "Contacts": { "type": ["object", "null"] },
+        "FieldsOfScience": { "type": ["object", "null"] },
+        "ReportingGroups": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ParentVO": { "type": ["object", "null"] },
+        "OASIS": { "type": ["object", "null"] },
+        "Credentials": { "type": ["object", "null"] },
+        "DataFederations": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

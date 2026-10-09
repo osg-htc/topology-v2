@@ -17,6 +17,7 @@ const KIND_LABEL: Record<string, string> = {
   facility: "Facility",
   project: "Project",
   support_center: "Support center",
+  vo: "VO",
   downtime: "Downtime",
   bundle: "Bundle",
 };
@@ -116,6 +117,12 @@ export function proposalSummary(p: ProposalLike): ProposalSummary {
     case "support_center":
       if (state.community) changes.push(`community ${state.community}`);
       break;
+    case "vo": {
+      const vo = asRec(state.vo);
+      if (vo.LongName) changes.push(String(vo.LongName));
+      if (vo.Disable === true) changes.push("disabled");
+      break;
+    }
   }
   if (changes.length === 0) changes.push(`${p.operation} ${kindLabel(p.entity_kind).toLowerCase()}`);
   return { kind: p.entity_kind, title, changes };

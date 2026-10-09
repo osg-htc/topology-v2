@@ -29,6 +29,8 @@ func (h *Handler) snapshotEntity(ctx context.Context, entityKind, targetName str
 		return h.snapshotProjectState(ctx, targetName)
 	case models.KindSupportCenter:
 		return h.snapshotSupportCenterState(ctx, targetName)
+	case models.KindVO:
+		return h.snapshotVOState(ctx, targetName)
 	default:
 		return nil // downtime, bundle: not yet supported -- unchanged from before
 	}
@@ -253,6 +255,17 @@ func mergeProposedState(entityKind string, base, incoming json.RawMessage) json.
 					mergedInner["Services"] = mergeServiceEntries(baseInner["Services"], incomingServices)
 				}
 				merged["resource"] = mergedInner
+			}
+		}
+	}
+	if entityKind == models.KindVO {
+		// Same reason as "resource": every VO edit carries the whole document under
+		// "vo", so a merge that stopped at the envelope would replace it wholesale.
+		// Merging one level down by key presence is what lets a form with no
+		// control for OASIS/Credentials/DataFederations leave them untouched.
+		if baseInner, ok := baseMap["vo"].(map[string]interface{}); ok {
+			if incomingInner, ok := incomingMap["vo"].(map[string]interface{}); ok {
+				merged["vo"] = mergeShallow(baseInner, incomingInner)
 			}
 		}
 	}

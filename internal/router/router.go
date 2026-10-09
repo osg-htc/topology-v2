@@ -74,6 +74,9 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 		r.Get("/facilities/{name}", h.FacilityDetailHandler)
 		r.Get("/projects", h.ListProjectsBrowseHandler)
 		r.Get("/projects/{name}", h.GetProjectHandler)
+		r.Get("/vos", h.ListVOsHandler)
+		r.Get("/vos/{name}", h.VODetailHandler)
+		r.Get("/reporting-group-names", h.ReportingGroupNamesHandler)
 		r.Get("/support-centers", h.ListSupportCentersHandler)
 		r.Get("/support-centers/{name}", h.SupportCenterDetailHandler)
 		r.Get("/institutions", h.ListInstitutionsHandler)
@@ -117,6 +120,7 @@ func New(cfg *config.Config, queries *db.Queries, logger zerolog.Logger) (*chi.M
 			r.Get("/dashboard", h.DashboardHandler)
 			r.Get("/user-labels", h.UserLabelsHandler)
 			r.Get("/users/search", h.SearchContactableUsersHandler)
+			r.Get("/vos/{name}/document", h.VODocumentHandler)
 
 			r.Route("/proposals", func(r chi.Router) {
 				r.Post("/", h.CreateProposal)

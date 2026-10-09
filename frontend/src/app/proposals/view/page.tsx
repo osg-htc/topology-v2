@@ -27,6 +27,8 @@ function editFormHref(kind: string, state: unknown): string | null {
       return "/projects/new";
     case "support_center":
       return "/support-centers/new";
+    case "vo":
+      return "/vos/new";
     default:
       return null;
   }

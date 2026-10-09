@@ -466,6 +466,8 @@ func (h *Handler) applyProposal(ctx context.Context, q *db.Queries, p *models.Pr
 		return h.applyProjectProposal(ctx, q, p, actorID)
 	case models.KindSupportCenter:
 		return h.applySupportCenterProposal(ctx, q, p, actorID)
+	case models.KindVO:
+		return h.applyVOProposal(ctx, q, p, actorID)
 	case models.KindDowntime:
 		return h.applyDowntimeProposal(ctx, q, p, actorID)
 	case models.KindBundle:

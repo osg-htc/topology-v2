@@ -11,6 +11,8 @@ type VORow struct {
 	VOID    int64
 	Disable bool
 	Raw     []byte
+	// UpdatedAt is only populated by GetVO, for the proposal stale-base guard.
+	UpdatedAt time.Time
 }
 
 // ProjectRow is a relational project row.

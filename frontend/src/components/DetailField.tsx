@@ -2,9 +2,9 @@
 export function DetailField({ label, value }: { label: string; value?: string | number | null }) {
   const display = value === undefined || value === null || value === "" ? "—" : String(value);
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</dt>
-      <dd className="mt-0.5 text-sm text-gray-800">{display}</dd>
+      <dd className="mt-0.5 break-words text-sm text-gray-800">{display}</dd>
     </div>
   );
 }
