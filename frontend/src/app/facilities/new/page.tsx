@@ -31,9 +31,15 @@ function NewFacilityForm() {
     setContacts(fromEntityContacts(editData.contacts));
   }, [editData]);
 
+  // An existing facility with no institution on record (v1 tolerates this)
+  // may stay that way, so it can still be edited; one that has an institution
+  // -- and every new facility -- must keep a valid one.
+  const hadNoInstitution = !!editName && !!editData && !editData.institution_id;
+  const institutionOptional = hadNoInstitution && !institutionID;
+
   const submit = async (asDraft: boolean) => {
     setErr("");
-    if (!asDraft && !institutionValid) {
+    if (!asDraft && !institutionValid && !institutionOptional) {
       setShowErrors(true);
       setErr("Pick an institution from the registry.");
       return;
@@ -68,12 +74,17 @@ function NewFacilityForm() {
           <InstitutionPicker
             value={institutionID}
             initialName={editData?.institution_id}
-            invalid={showErrors && !institutionValid}
+            invalid={showErrors && !institutionValid && !institutionOptional}
             onResolve={(iid, valid) => {
               setInstitutionID(iid);
               setInstitutionValid(valid);
             }}
           />
+          {hadNoInstitution && (
+            <p className="text-xs text-gray-500">
+              This facility has no institution on record. You can leave it blank, or pick one from the registry.
+            </p>
+          )}
         </div>
       </Card>
       <div className="mt-6 max-w-xl">

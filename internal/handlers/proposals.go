@@ -880,11 +880,24 @@ func (h *Handler) applyFacilityProposal(ctx context.Context, q *db.Queries, p *m
 	if err := json.Unmarshal(p.ProposedState, &fp); err != nil {
 		return err
 	}
-	// A facility must be tied to a real institution from the registry.
+	// A facility must be tied to a real institution from the registry --
+	// except that an existing facility which has none on record (v1 tolerates
+	// InstitutionID: null; e.g. Gridplexus, NSF DC) may keep having none, so
+	// it stays editable. New facilities, and edits that would drop or skip an
+	// institution an existing facility already has, still require one.
 	if fp.InstitutionID == "" {
-		return errors.New("a facility requires an institution (institution_id)")
-	}
-	if ok, err := q.InstitutionExists(ctx, fp.InstitutionID); err != nil {
+		keepsNone := false
+		if p.Operation == models.OpUpdate {
+			cur, err := q.GetFacilityRow(ctx, p.TargetName)
+			if err != nil {
+				return err
+			}
+			keepsNone = cur.InstitutionID == ""
+		}
+		if !keepsNone {
+			return errors.New("a facility requires an institution (institution_id)")
+		}
+	} else if ok, err := q.InstitutionExists(ctx, fp.InstitutionID); err != nil {
 		return err
 	} else if !ok {
 		return fmt.Errorf("institution %q is not in the registry — register it first", fp.InstitutionID)
